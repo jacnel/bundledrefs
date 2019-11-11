@@ -1,0 +1,225 @@
+env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so ./sss-jacob.lazylist.rq_lockfree.out -i 50 -d 50 -k 10000 -rq 0 -rqsize 100 -p -t 3000 -nrq 0 -nwork 1 
+FIND_FUNC=contains
+INSERT_FUNC=insertIfAbsent
+ERASE_FUNC=erase
+RQ_FUNC=rangeQuery
+RECLAIM=reclaimer_debra<test_type>
+ALLOC=allocator_new_segregated<test_type>
+POOL=pool_none<test_type>
+PREFILL=1
+MILLIS_TO_RUN=3000
+INS=50
+DEL=50
+RQ=0
+RQSIZE=100
+MAXKEY=10000
+WORK_THREADS=1
+RQ_THREADS=0
+WIDTH_SEQ=48
+sizes: node=56
+ACTUAL_THREAD_BINDINGS=-1
+stat id=0 name=node_allocated_addresses tid=0 offset=0 capacity=100 size=0 stat_ptr_addr=140358960737024
+stat id=1 name=descriptor_allocated_addresses tid=0 offset=800 capacity=100 size=0 stat_ptr_addr=140358960737824
+stat id=2 name=extra_type1_allocated_addresses tid=0 offset=1600 capacity=100 size=0 stat_ptr_addr=140358960738624
+stat id=3 name=extra_type2_allocated_addresses tid=0 offset=2400 capacity=100 size=0 stat_ptr_addr=140358960739424
+stat id=4 name=extra_type3_allocated_addresses tid=0 offset=3200 capacity=100 size=0 stat_ptr_addr=140358960740224
+stat id=5 name=extra_type4_allocated_addresses tid=0 offset=4000 capacity=100 size=0 stat_ptr_addr=140358960741024
+stat id=6 name=num_updates tid=0 offset=4800 capacity=1 size=0 stat_ptr_addr=140358960741824
+stat id=7 name=num_searches tid=0 offset=4808 capacity=1 size=0 stat_ptr_addr=140358960741832
+stat id=8 name=num_rq tid=0 offset=4816 capacity=1 size=0 stat_ptr_addr=140358960741840
+stat id=9 name=num_operations tid=0 offset=4824 capacity=1 size=0 stat_ptr_addr=140358960741848
+stat id=10 name=visited_in_announcements tid=0 offset=4832 capacity=10000 size=0 stat_ptr_addr=140358960741856
+stat id=11 name=visited_in_bags tid=0 offset=84832 capacity=10000 size=0 stat_ptr_addr=140358960821856
+stat id=12 name=skipped_in_bags tid=0 offset=164832 capacity=10000 size=0 stat_ptr_addr=140358960901856
+stat id=13 name=latency_rqs tid=0 offset=244832 capacity=10000 size=0 stat_ptr_addr=140358960981856
+stat id=14 name=latency_updates tid=0 offset=324832 capacity=10000 size=0 stat_ptr_addr=140358961061856
+stat id=15 name=latency_searches tid=0 offset=404832 capacity=10000 size=0 stat_ptr_addr=140358961141856
+stat id=16 name=skiplist_inserted_on_level tid=0 offset=484832 capacity=30 size=0 stat_ptr_addr=140358961221856
+stat id=17 name=key_checksum tid=0 offset=485072 capacity=1 size=0 stat_ptr_addr=140358961222096
+stat id=18 name=prefill_size tid=0 offset=485080 capacity=1 size=0 stat_ptr_addr=140358961222104
+stat id=19 name=timer_latency tid=0 offset=485088 capacity=1 size=0 stat_ptr_addr=140358961222112
+ finished attempt ds seize: 4051
+ finished attempt ds seize: 4592
+ finished attempt ds seize: 4750
+ finished attempt ds seize: 4875
+ finished attempt ds seize: 4917
+ finished attempt ds seize: 4926
+first node_allocated_addresses by_index=2688 2752 0 64 128 192 256 320 384 448 512 576 640 704 768 832 896 960 1024 1088 1152 1216 1280 1344 1408 1472 1536 1600 1664 1728 1792 1856 1920 1984 2048 2112 2176 2240 2304 2368 2432 2496 2560 2624 2688 2752 2816 2880 2944 3008 3072 3136 3200 3264 3328 3392 3456 3520 3584 3648 3712 3776 3840 3904 3968 4032 0 64 128 192 256 320 384 448 512 576 640 704 768 832 896 960 1024 1088 1152 1216 1280 1344 1408 1472 1536 1600 1664 1728 1792 1856 1920 1984 2048 2112
+first descriptor_allocated_addresses by_index
+first extra_type1_allocated_addresses by_index
+first extra_type2_allocated_addresses by_index
+first extra_type3_allocated_addresses by_index
+first extra_type4_allocated_addresses by_index
+sum num_updates total=57792
+sum num_searches total=0
+sum num_rq total=0
+sum num_operations by_thread=57792 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+average num_operations total=57792
+sum num_operations total=57792
+
+log histogram of none visited_in_announcements full_data=1:0
+    [2^00, 2^01]: 0
+sum visited_in_announcements total=0
+average visited_in_announcements total=0
+stdev visited_in_announcements total=0
+
+log histogram of none visited_in_bags full_data=1:0
+    [2^00, 2^01]: 0
+sum visited_in_bags total=0
+average visited_in_bags total=0
+stdev visited_in_bags total=0
+
+log histogram of none skipped_in_bags full_data=1:0
+    [2^00, 2^01]: 0
+sum skipped_in_bags total=0
+average skipped_in_bags total=0
+stdev skipped_in_bags total=0
+
+log histogram of none latency_rqs full_data=1:0
+    [2^00, 2^01]: 0
+sum latency_rqs total=0
+average latency_rqs total=0
+stdev latency_rqs total=0
+min latency_rqs total=9223372036854775807
+max latency_rqs total=-9223372036854775808
+
+log histogram of none latency_updates full_data=1:0 2:0 4:0 8:0 16:0 32:0 64:88 128:425 256:701 512:697 1024:830 2048:1205 4096:2086 8192:2627 16384:1308 32768:31 65536:2
+    [2^00, 2^01]: 0
+    (2^01, 2^02]: 0
+    (2^02, 2^03]: 0
+    (2^03, 2^04]: 0
+    (2^04, 2^05]: 0
+    (2^05, 2^06]: 0
+    (2^06, 2^07]: 88
+    (2^07, 2^08]: 425
+    (2^08, 2^09]: 701
+    (2^09, 2^10]: 697
+    (2^10, 2^11]: 830
+    (2^11, 2^12]: 1205
+    (2^12, 2^13]: 2086
+    (2^13, 2^14]: 2627
+    (2^14, 2^15]: 1308
+    (2^15, 2^16]: 31
+    (2^16, 2^17]: 2
+sum latency_updates total=77991385
+average latency_updates total=7799
+stdev latency_updates total=71
+min latency_updates total=68
+max latency_updates total=102166
+
+log histogram of none latency_searches full_data=1:0
+    [2^00, 2^01]: 0
+sum latency_searches total=0
+average latency_searches total=0
+stdev latency_searches total=0
+min latency_searches total=9223372036854775807
+max latency_searches total=-9223372036854775808
+finished prefilling to size 4979 for expected size 5000 keysum=24994510 dskeysum=24994510 dssize=4979, performing 57792 successful updates in 0.573 seconds (total time 0.772s)
+main thread: starting timer...
+
+###############################################################################
+################################ BEGIN RUNNING ################################
+###############################################################################
+
+joining thread 0
+
+###############################################################################
+################################# END RUNNING #################################
+###############################################################################
+
+3s
+PRODUCING OUTPUT
+first node_allocated_addresses by_index=1920 2176 3776 2560 2944 1664 2432 448 3136 1216 1408 3456 512 3328 3264 2816 1408 1728 2496 3584 1536 3264 2624 3968 3648 3264 2176 3328 2304 1408 1152 2688 2368 3392 320 1152 3776 4032 3136 128 3456 4032 1344 3200 1344 128 3072 192 3008 1856 448 704 576 320 2816 2048 2240 2432 960 2176 3968 3840 2432 1664 1408 2688 3072 512 3392 1472 640 3904 640 2560 832 2048 1088 1344 128 1664 960 3776 1664 2624 3072 576 1920 1344 128 192 576 3584 512 3520 640 448 320 1280 768 2688
+first descriptor_allocated_addresses by_index
+first extra_type1_allocated_addresses by_index
+first extra_type2_allocated_addresses by_index
+first extra_type3_allocated_addresses by_index
+first extra_type4_allocated_addresses by_index
+sum num_updates total=196058
+sum num_searches total=0
+sum num_rq total=0
+sum num_operations by_thread=196058 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+average num_operations total=196058
+sum num_operations total=196058
+
+log histogram of none visited_in_announcements full_data=1:0
+    [2^00, 2^01]: 0
+sum visited_in_announcements total=0
+average visited_in_announcements total=0
+stdev visited_in_announcements total=0
+
+log histogram of none visited_in_bags full_data=1:0
+    [2^00, 2^01]: 0
+sum visited_in_bags total=0
+average visited_in_bags total=0
+stdev visited_in_bags total=0
+
+log histogram of none skipped_in_bags full_data=1:0
+    [2^00, 2^01]: 0
+sum skipped_in_bags total=0
+average skipped_in_bags total=0
+stdev skipped_in_bags total=0
+
+log histogram of none latency_rqs full_data=1:0
+    [2^00, 2^01]: 0
+sum latency_rqs total=0
+average latency_rqs total=0
+stdev latency_rqs total=0
+min latency_rqs total=9223372036854775807
+max latency_rqs total=-9223372036854775808
+
+log histogram of none latency_updates full_data=1:0 2:0 4:0 8:0 16:0 32:0 64:2 128:18 256:41 512:87 1024:192 2048:384 4096:692 8192:1427 16384:2748 32768:4300 65536:109
+    [2^00, 2^01]: 0
+    (2^01, 2^02]: 0
+    (2^02, 2^03]: 0
+    (2^03, 2^04]: 0
+    (2^04, 2^05]: 0
+    (2^05, 2^06]: 0
+    (2^06, 2^07]: 2
+    (2^07, 2^08]: 18
+    (2^08, 2^09]: 41
+    (2^09, 2^10]: 87
+    (2^10, 2^11]: 192
+    (2^11, 2^12]: 384
+    (2^12, 2^13]: 692
+    (2^13, 2^14]: 1427
+    (2^14, 2^15]: 2748
+    (2^15, 2^16]: 4300
+    (2^16, 2^17]: 109
+sum latency_updates total=298422856
+average latency_updates total=29842
+stdev latency_updates total=179
+min latency_updates total=115
+max latency_updates total=112438
+
+log histogram of none latency_searches full_data=1:0
+    [2^00, 2^01]: 0
+sum latency_searches total=0
+average latency_searches total=0
+stdev latency_searches total=0
+min latency_searches total=9223372036854775807
+max latency_searches total=-9223372036854775808
+
+Validation OK: threadsKeySum = 24996430 dsKeySum=24996430
+Structural validation OK
+
+total find                    : 0
+total rq                      : 0
+total updates                 : 196058
+total queries                 : 0
+total ops                     : 196058
+find throughput               : 0
+rq throughput                 : 0
+update throughput             : 65352
+query throughput              : 0
+total throughput              : 65352
+
+elapsed milliseconds          : 3000
+napping milliseconds overtime : 0
+data structure size           : 5011 nodes in data structure
+
+begin papi_print_counters...
+end papi_print_counters.
+begin delete ds...
+end delete ds.
+garbage=0

@@ -1,0 +1,111 @@
+env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so ./sss-jacob.skiplistlock.rq_lockfree.out -i 50 -d 50 -k 100000 -rq 0 -rqsize 100 -p -t 3000 -nrq 0 -nwork 2 
+FIND_FUNC=contains
+INSERT_FUNC=insertIfAbsent
+ERASE_FUNC=erase
+RQ_FUNC=rangeQuery
+RECLAIM=reclaimer_debra<test_type>
+ALLOC=allocator_new_segregated<test_type>
+POOL=pool_none<test_type>
+PREFILL=1
+MILLIS_TO_RUN=3000
+INS=50
+DEL=50
+RQ=0
+RQSIZE=100
+MAXKEY=100000
+WORK_THREADS=2
+RQ_THREADS=0
+WIDTH_SEQ=48
+sizes: node=224
+ACTUAL_THREAD_BINDINGS=-1,-1
+stat id=0 name=node_allocated_addresses tid=0 offset=0 capacity=100 size=0 stat_ptr_addr=140257497293056
+stat id=1 name=descriptor_allocated_addresses tid=0 offset=800 capacity=100 size=0 stat_ptr_addr=140257497293856
+stat id=2 name=extra_type1_allocated_addresses tid=0 offset=1600 capacity=100 size=0 stat_ptr_addr=140257497294656
+stat id=3 name=extra_type2_allocated_addresses tid=0 offset=2400 capacity=100 size=0 stat_ptr_addr=140257497295456
+stat id=4 name=extra_type3_allocated_addresses tid=0 offset=3200 capacity=100 size=0 stat_ptr_addr=140257497296256
+stat id=5 name=extra_type4_allocated_addresses tid=0 offset=4000 capacity=100 size=0 stat_ptr_addr=140257497297056
+stat id=6 name=num_updates tid=0 offset=4800 capacity=1 size=0 stat_ptr_addr=140257497297856
+stat id=7 name=num_searches tid=0 offset=4808 capacity=1 size=0 stat_ptr_addr=140257497297864
+stat id=8 name=num_rq tid=0 offset=4816 capacity=1 size=0 stat_ptr_addr=140257497297872
+stat id=9 name=num_operations tid=0 offset=4824 capacity=1 size=0 stat_ptr_addr=140257497297880
+stat id=10 name=visited_in_announcements tid=0 offset=4832 capacity=10000 size=0 stat_ptr_addr=140257497297888
+stat id=11 name=visited_in_bags tid=0 offset=84832 capacity=10000 size=0 stat_ptr_addr=140257497377888
+stat id=12 name=skipped_in_bags tid=0 offset=164832 capacity=10000 size=0 stat_ptr_addr=140257497457888
+stat id=13 name=latency_rqs tid=0 offset=244832 capacity=10000 size=0 stat_ptr_addr=140257497537888
+stat id=14 name=latency_updates tid=0 offset=324832 capacity=10000 size=0 stat_ptr_addr=140257497617888
+stat id=15 name=latency_searches tid=0 offset=404832 capacity=10000 size=0 stat_ptr_addr=140257497697888
+stat id=16 name=skiplist_inserted_on_level tid=0 offset=484832 capacity=30 size=0 stat_ptr_addr=140257497777888
+stat id=17 name=key_checksum tid=0 offset=485072 capacity=1 size=0 stat_ptr_addr=140257497778128
+stat id=18 name=prefill_size tid=0 offset=485080 capacity=1 size=0 stat_ptr_addr=140257497778136
+stat id=19 name=timer_latency tid=0 offset=485088 capacity=1 size=0 stat_ptr_addr=140257497778144
+ finished attempt ds seize: 48887
+first node_allocated_addresses by_index=0 224 448 672 896 1120 1344 1568 1792 2016 2240 2464 2688 2912 3136 3360 3584 3808 4032 160 384 608 832 1056 1280 1504 1728 1952 2176 2400 2624 2848 3072 3296 3520 3744 3968 96 320 544 768 992 1216 1440 1664 1888 2112 2336 2560 2784 3008 3232 3456 3680 3904 32 256 480 704 928 1152 1376 1600 1824 2048 2272 2496 2720 2944 3168 3392 3616 3840 4064 192 416 640 864 1088 1312 1536 1760 1984 2208 2432 2656 2880 3104 3328 3552 3776 4000 128 352 576 800 1024 1248 1472 1696
+first descriptor_allocated_addresses by_index
+first extra_type1_allocated_addresses by_index
+first extra_type2_allocated_addresses by_index
+first extra_type3_allocated_addresses by_index
+first extra_type4_allocated_addresses by_index
+sum num_updates total=789901
+sum num_searches total=0
+sum num_rq total=0
+sum num_operations by_thread=391655 398246 0 0 0 0 0 0
+average num_operations total=394950
+sum num_operations total=789901
+
+log histogram of none visited_in_announcements full_data=1:0
+    [2^00, 2^01]: 0
+sum visited_in_announcements total=0
+average visited_in_announcements total=0
+stdev visited_in_announcements total=0
+
+log histogram of none visited_in_bags full_data=1:0
+    [2^00, 2^01]: 0
+sum visited_in_bags total=0
+average visited_in_bags total=0
+stdev visited_in_bags total=0
+
+log histogram of none skipped_in_bags full_data=1:0
+    [2^00, 2^01]: 0
+sum skipped_in_bags total=0
+average skipped_in_bags total=0
+stdev skipped_in_bags total=0
+
+log histogram of none latency_rqs full_data=1:0
+    [2^00, 2^01]: 0
+sum latency_rqs total=0
+average latency_rqs total=0
+stdev latency_rqs total=0
+min latency_rqs total=9223372036854775807
+max latency_rqs total=-9223372036854775808
+
+log histogram of none latency_updates full_data=1:0 2:0 4:0 8:0 16:0 32:0 64:0 128:38 256:5588 512:13379 1024:411 2048:529 4096:41 8192:11 16384:1 32768:0 65536:2
+    [2^00, 2^01]: 0
+    (2^01, 2^02]: 0
+    (2^02, 2^03]: 0
+    (2^03, 2^04]: 0
+    (2^04, 2^05]: 0
+    (2^05, 2^06]: 0
+    (2^06, 2^07]: 0
+    (2^07, 2^08]: 38
+    (2^08, 2^09]: 5588
+    (2^09, 2^10]: 13379
+    (2^10, 2^11]: 411
+    (2^11, 2^12]: 529
+    (2^12, 2^13]: 41
+    (2^13, 2^14]: 11
+    (2^14, 2^15]: 1
+    (2^15, 2^16]: 0
+    (2^16, 2^17]: 2
+sum latency_updates total=14277504
+average latency_updates total=713
+stdev latency_updates total=7
+min latency_updates total=204
+max latency_updates total=95294
+
+log histogram of none latency_searches full_data=1:0
+    [2^00, 2^01]: 0
+sum latency_searches total=0
+average latency_searches total=0
+stdev latency_searches total=0
+min latency_searches total=9223372036854775807
+max latency_searches total=-9223372036854775808
