@@ -107,8 +107,8 @@ class bundle_skiplist {
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
 
-  void initThread(const int tid, bool is_rq_thread = false);
-  void deinitThread(const int tid, bool is_rq_thread = false);
+  void initThread(const int tid);
+  void deinitThread(const int tid);
 #ifdef USE_DEBUGCOUNTERS
   debugCounters* debugGetCounters() { return counters; }
   void clearCounters() { counters->clear(); }

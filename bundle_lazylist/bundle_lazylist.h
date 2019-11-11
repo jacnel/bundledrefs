@@ -58,8 +58,8 @@ class bundle_lazylist {
    * It must be okay that we do this with the main thread and later with another
    * thread!!!
    */
-  void initThread(const int tid, bool is_rq_thread = false);
-  void deinitThread(const int tid, bool is_rq_thread = false);
+  void initThread(const int tid);
+  void deinitThread(const int tid);
 #ifdef USE_DEBUGCOUNTERS
   debugCounters* debugGetCounters() { return counters; }
   void clearCounters() { counters->clear(); }

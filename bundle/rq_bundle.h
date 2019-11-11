@@ -12,12 +12,6 @@ typedef long long timestamp_t;
 #define BUNDLE_MAX_TIMESTAMP (LLONG_MAX - 1)
 #define BUNDLE_BUSY_TIMESTAMP LLONG_MAX
 
-#ifndef BUNDLE_MAX_RQ_THREADS
-#define BUNDLE_MAX_RQ_THREADS 8
-#endif
-#define BUNDLE_DEPTH (BUNDLE_MAX_RQ_THREADS + 2)
-
-#define BUNDLE_STALL_RQS
 #define CPU_RELAX
 
 // A collection required by each data structure node to ensure correct range
@@ -25,37 +19,75 @@ typedef long long timestamp_t;
 // it can ensure that no range query will require them. This is accomplished
 // because we limit the number of active range queries.
 template <typename NodeType>
-class rq_bundle_t {
+class rq_bundle_node_t {
+ private:
+  timestamp_t ts_;
+  NodeType *ptr_;
+  struct rq_bundle_node *next_;
+
  public:
-  const unsigned int depth = BUNDLE_DEPTH;
-  volatile char pad0[PREFETCH_SIZE_BYTES];
-  volatile timestamp_t newest_ts = BUNDLE_NULL_TIMESTAMP;
-  volatile char pad1[PREFETCH_SIZE_BYTES];
-  volatile unsigned int newest_idx = 0;
-  volatile timestamp_t ts_bundle[BUNDLE_DEPTH];
-  NodeType* volatile ptr_bundle[BUNDLE_DEPTH];
+  explicit rq_bundle_node_t(timestamp_t ts, NodeType *ptr,
+                            rq_bundle_node_t *next)
+      : ts_(ts), ptr_(ptr), next_(next) {}
+
+  void set_next(rq_bundle_node_t *next) { next_ = next; }
+};
+
+template <typename NodeType>
+class rq_bundle_t {
+ private:
+  rq_bundle_node_t *volatile head;
+  rq_bundle_node_t *tail;
+
+ public:
+  rq_bundle_t() {
+    head = new rq_bundle_node_t(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
+    tail = head;
+  }
 
   // Returns a reference to the node that immediately followed at timestamp ts.
-  NodeType* volatile getPtrByTimestamp(timestamp_t ts) {
-    unsigned int start = newest_idx;
-    unsigned int next_idx = start;
-    unsigned int temp_idx;
-    timestamp_t temp_ts;
-    for (int i = 0; i < depth; ++i) {
-      temp_idx = (depth + (start - i)) % depth;
-      temp_ts = ts_bundle[temp_idx];
-      while ((temp_ts) == BUNDLE_BUSY_TIMESTAMP) {
-        temp_ts = ts_bundle[temp_idx];
-      }
-      if (temp_ts > this->ts_bundle[next_idx] && temp_ts <= ts &&
-          temp_ts != BUNDLE_NULL_TIMESTAMP) {
-        next_idx = temp_idx;
-      }
+  inline NodeType *volatile getPtrByTimestamp(timestamp_t ts) {
+    // Start at head and work backwards until edge is found.
+    rq_bundle_node_t curr = head;
+    while (curr.ts != BUNDLE_NULL_TIMESTAMP && curr.ts > ts) {
+      // TODO: Maybe, prefetch the next pointer.
+      curr = curr.next;
     }
-    assert(ptr_bundle[next_idx] != nullptr);
-    return ptr_bundle[next_idx];
+    return curr.ptr;
+  }
+
+  // Inserts a new rq_bundle_node at the head of the bundle.
+  void insertAtHead(rq_bundle_node_t *const new_bundle_node) {
+    new_bundle_node.set_next(head);
+    head = new_bundle_node;
+  }
+
+  // Recycles any edges that are older than ts.
+  inline void recycleEdges(timestamp_t ts) {
+    // Start at head and remove nodes that are lower than ts.
+    rq_bundle_node_t pred = nullptr;
+    rq_bundle_node_t curr = head;
+    while (curr.ts != BUNDLE_NULL_TIMESTAMP && curr.ts >= ts) {
+      pred = curr;
+      curr = curr.next;
+    }
+    // curr points to the first node that may be recylced given ts, so swing
+    // pred's next to the tail. Currently, assumed that external synchronization
+    // protects the bundle.
+    if (pred != nullptr) {
+      pred.next = tail;
+      // TODO: Handle memory leaks.
+    }
   }
 };
+
+// NOTES ON IMPLEMENTATION DETAILS.
+// --------------------------------
+// The active RQ array is now the number of processes allowed to accomodate any
+// number of range query threads. Snapshots are still taken by iterating over
+// the list. For now, we iterate over the entire list but there is room for
+// optimizations here (i.e., maintin number of active RQs and map the tid to the
+// next slot in array).
 
 // Stores information about the active range queries. Used by updates to ensure
 // that no edges required by an active range query are recycled.
@@ -63,17 +95,7 @@ typedef struct rq_snapshot {
   int num_active;
   timestamp_t oldest_active;
   timestamp_t newest_active;
-  timestamp_t active_rqs[BUNDLE_MAX_RQ_THREADS];
-
-  rq_snapshot* init() {
-    num_active = 0;
-    oldest_active = BUNDLE_MAX_TIMESTAMP;
-    newest_active = BUNDLE_NULL_TIMESTAMP;
-    for (int i = 0; i < BUNDLE_MAX_RQ_THREADS; ++i) {
-      active_rqs[i] = BUNDLE_NULL_TIMESTAMP;
-    }
-    return this;
-  }
+  timestamp_t *active_rqs;
 } rq_snapshot_t;
 
 // Ensures consistent view of data structure for range queries by augmenting
@@ -103,37 +125,30 @@ class RQProvider {
     volatile char bytes[__THREAD_DATA_SIZE];
   } __attribute__((aligned(__THREAD_DATA_SIZE)));
 
-  // Number of processes concurrently operating on the data structure.
-  const int num_processes_;
-  // Maximum number of threads performing range queries.
-  const int max_num_rq_threads_ = BUNDLE_MAX_RQ_THREADS;
-  // Mapping from thread ids to RQ ids.
-  int rq_tids[MAX_TID_POW2];
-  volatile char pad0[PREFETCH_SIZE_BYTES];
   // Timestamp used by range queries to linearize accesses.
   std::atomic<timestamp_t> curr_timestamp_;
-  volatile char pad1[PREFETCH_SIZE_BYTES];
-  // Number of threads initialized to perform range queries.
-  std::atomic<int> num_init_rq_threads_;
-  volatile char pad2[PREFETCH_SIZE_BYTES];
-  // Array of RQ announcements. One per RQ thread.
-  __rq_thread_data* rq_thread_data_;
-  // Array of snapshots for updates.
-  __update_thread_data* update_thread_data_;
+  volatile char pad0[PREFETCH_SIZE_BYTES];
+  // Array of RQ announcements. One per thread.
+  __rq_thread_data *rq_thread_data_;
+  // Array of snapshots for updates. One per thread.
+  __update_thread_data *update_thread_data_;
+  // Number of processes concurrently operating on the data structure.
+  const int num_processes_;
 
-  DataStructure* ds_;
-  RecordManager* const recmgr_;
+  DataStructure *ds_;
+  RecordManager *const recmgr_;
 
   int init_[MAX_TID_POW2] = {
       0,
   };
 
  public:
-  RQProvider(const int num_processes, DataStructure* ds, RecordManager* recmgr)
+  RQProvider(const int num_processes, DataStructure *ds, RecordManager *recmgr)
       : num_processes_(num_processes), ds_(ds), recmgr_(recmgr) {
-    rq_thread_data_ = new __rq_thread_data[max_num_rq_threads_];
+    rq_thread_data_ = new __rq_thread_data[num_processes];
     update_thread_data_ = new __update_thread_data[num_processes];
-    for (int i = 0; i < max_num_rq_threads_; ++i) {
+    for (int i = 0; i < num_processes; ++i) {
+      update_thread_data_[i].active_rqs = new timestamp_t[num_processes];
       rq_thread_data_[i].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
       rq_thread_data_[i].data.rq_flag = false;
     }
@@ -161,43 +176,10 @@ class RQProvider {
       init_[tid] = !init_[tid];
   }
 
-  bool registerRQThread(const int tid) {
-    // TODO: Make blocking to allow for any thread to perform a range query.
-    if (rq_tids[tid] != -1) {
-      return true;
-    } else if (num_init_rq_threads_ >= BUNDLE_MAX_RQ_THREADS) {
-      // Cannot admit any new range query threads.
-      return false;
-    } else {
-      const int rq_tid = num_init_rq_threads_.fetch_add(1);
-      assert(rq_thread_data_[rq_tid].data.rq_lin_time ==
-                 BUNDLE_NULL_TIMESTAMP &&
-             rq_thread_data_[rq_tid].data.rq_flag == false);
-      rq_tids[tid] = rq_tid;
-      return true;
-    }
-  }
-
-  void unregisterRQThread(const int tid) {
-    if (rq_tids[tid] == -1) {
-      return;
-    } else {
-      rq_tids[tid] = -1;
-      num_init_rq_threads_.fetch_sub(1, std::memory_order_acquire);
-      assert(num_init_rq_threads_ >= 0);
-    }
-  }
-
   // Initializes a new node's bundle.
-  inline void init_node(const int tid, NodeType* const node,
-                        NodeType* const next) {
+  inline void init_node(const int tid, NodeType *const node,
+                        NodeType *const next) {
     node->rqbundle = new rq_bundle_t<NodeType>();
-    int newest_idx = node->rqbundle->newest_idx;
-    for (int i = 0; i < node->rqbundle->depth; ++i) {
-      // The timestamp of newest must be set later.
-      node->rqbundle->ts_bundle[i] = BUNDLE_NULL_TIMESTAMP;
-      node->rqbundle->ptr_bundle[i] = (i == newest_idx ? next : nullptr);
-    }
   }
 
   // For each address addr that is modified by rq_linearize_update_at_write
@@ -206,7 +188,7 @@ class RQProvider {
   //
   // TODO: This was kept around to make porting RQProvider easier.
   template <typename T>
-  inline void write_addr(const int tid, T volatile* const addr, const T val) {
+  inline void write_addr(const int tid, T volatile *const addr, const T val) {
     *addr = val;
   }
 
@@ -216,25 +198,30 @@ class RQProvider {
   //
   // TODO: This was kept around to make porting RQProvider easier.
   template <typename T>
-  inline T read_addr(const int tid, T volatile* const addr) {
+  inline T read_addr(const int tid, T volatile *const addr) {
     return *addr;
   }
 
   // TODO: These were also kept around to make life easier.
   inline void announce_physical_deletion(const int tid,
-                                         NodeType* const* const deletedNodes) {}
+                                         NodeType *const *const deletedNodes) {}
   inline void physical_deletion_failed(const int tid,
-                                       NodeType* const* const deletedNodes) {}
+                                       NodeType *const *const deletedNodes) {}
   inline void physical_deletion_succeeded(const int tid,
-                                          NodeType* const* const deletedNodes) {
+                                          NodeType *const *const deletedNodes) {
   }
 
  private:
   // Creates a snapshot of the current state of active RQs.
-  inline void snapshot_active_rqs(const int tid) {
-    rq_snapshot_t* snapshot = update_thread_data_[tid].snapshot.init();
+  inline rq_snaptshot_t *snapshot_active_rqs(const int tid) {
+    rq_snapshot_t *snapshot = update_thread_data_[tid].snapshot;
+    // Clear previous snapshot.
+    snapshot->num_active = 0;
+    snapshot->max_active = BUNDLE_MIN_TIMESTAMP;
+    snapshot->min_active = BUNDLE_MAX_TIMESTAMP;
+    // Take new snapshot.
     timestamp_t curr_rq;
-    for (int i = 0; i < max_num_rq_threads_; ++i) {
+    for (int i = 0; i < num_processes_; ++i) {
       while (rq_thread_data_[i].data.rq_flag == true)
         ;  // Wait until RQ linearizes itself.
       curr_rq = rq_thread_data_[i].data.rq_lin_time;
@@ -248,52 +235,7 @@ class RQProvider {
         }
       }
     }
-    assert(snapshot->num_active <= num_init_rq_threads_);
-  }
-
-  // It is assumed that no concurrent operation will alter a bundle.
-  inline int find_edge_to_recycle(const int tid,
-                                  rq_bundle_t<NodeType>* rqbundle) {
-    timestamp_t curr_ts, next_ts, rq_ts, temp_ts;
-    int curr_idx;
-    unsigned int depth = rqbundle->depth;
-    unsigned int newest_idx = rqbundle->newest_idx;
-    volatile timestamp_t* ts_bundle = rqbundle->ts_bundle;
-    rq_snapshot_t* snapshot = &update_thread_data_[tid].snapshot;
-
-    if (snapshot->num_active == 0 ||  // Optimization.
-        snapshot->oldest_active >= ts_bundle[newest_idx]) {
-      return (newest_idx + 1) % depth;
-    }
-
-    for (int i = 0; i < depth - 1; ++i) {
-      curr_idx = (newest_idx + i) % depth;
-      curr_ts = ts_bundle[curr_idx];
-
-      if (curr_ts == BUNDLE_NULL_TIMESTAMP ||
-          curr_ts > snapshot->newest_active) {
-        return curr_idx;  // Trivially able to recycle.
-      } else {
-        next_ts = BUNDLE_MAX_TIMESTAMP;
-        for (int j = 0; j < depth; ++j) {
-          temp_ts = ts_bundle[(curr_idx + j) % depth];
-          if (temp_ts > curr_ts && temp_ts < next_ts) {
-            next_ts = temp_ts;
-          }
-        }
-        // All edges but the newest should have a newer edge.
-        assert(next_ts != BUNDLE_MAX_TIMESTAMP);
-
-        for (int a = 0; a < snapshot->num_active; ++a) {
-          rq_ts = snapshot->active_rqs[a];
-          if (curr_ts < rq_ts && next_ts <= rq_ts) {
-            return curr_idx;
-          }
-        }
-      }
-    }
-    assert(0);  // The design ensures that some edge is recyclable.
-    return -1;
+    return snapshot;
   }
 
   inline timestamp_t get_update_lin_time() {
@@ -325,49 +267,57 @@ class RQProvider {
   // Find and update the newest reference in the predecesor's bundle. If this
   // operation is an insert, then the new nodes bundle must also be initialized.
   template <typename T>
-  inline T linearize_update_at_write(const int tid, T volatile* const lin_addr,
-                                     const T& lin_newval,
-                                     rq_bundle_t<NodeType>* const pred_bundle,
-                                     rq_bundle_t<NodeType>* const curr_bundle,
-                                     NodeType* const ptr_bundle_val, bool is_insert) {
+  inline T linearize_update_at_write(const int tid, T volatile *const lin_addr,
+                                     const T &lin_newval,
+                                     rq_bundle_t<NodeType> *const pred_bundle,
+                                     rq_bundle_t<NodeType> *const curr_bundle,
+                                     NodeType *const pred_bundle_ptr,
+                                     NodeType *const curr_bundle_ptr,
+                                     bool is_insert) {
     // First, determine which edge in the bundle can be recycled. We delay this
     // until after the linearization point because only range queries will
     // require this information.
     //
     // TODO: If we want to implement a lock free version this may have to
     // change.
-    snapshot_active_rqs(tid);
+    rq_snapshot_t snapshot = snapshot_active_rqs(tid);
     SOFTWARE_BARRIER;
-    int pred_idx = find_edge_to_recycle(tid, pred_bundle);
-    int curr_idx = (is_insert ? curr_bundle->newest_idx : -1);
+    // BUSY_TIMESTAMP blocks all RQs that might see the update, ensuring that
+    // the update is visible (i.e., get and RQ have the same linearization
+    // point).
+    rq_bundle_node_t *pred_bundle_node =
+        new rq_bundle_node_t{BUNDLE_BUSY_TIMESTAMP, pred_bundle_ptr, nullptr};
 
-    // Blocks all RQs that may see the updated timestamp, ensuring that the
-    // update is visible (i.e., get and RQ have the same linearization point).
-    pred_bundle->ts_bundle[pred_idx] = BUNDLE_BUSY_TIMESTAMP;
+    // TODO: Remove edge recylcing from the critical path of an update.
+    pred_bundle->recycleEdges(snapshot->oldest_active);
+    pred_bundle->insertAtHead(pred_bundle_node);
+
     if (is_insert) {
-      curr_bundle->ts_bundle[curr_idx] = BUNDLE_BUSY_TIMESTAMP;
+      rq_bundle_node_t *curr_bundle_node =
+          new rq_bundle_node_t{BUNDLE_BUSY_TIMESTAMP, curr_bundle_ptr, nullptr};
+      curr_bundle->inserstAtHead(curr_bundle_node);
     }
     SOFTWARE_BARRIER;
+
+    // Get update linearization timestamp.
     timestamp_t lin_time = get_update_lin_time();
-
-    // Now, update the predecesor's bundle. The pointer must be set first so
-    // that an active RQ does not see an inconsistent value.
-    pred_bundle->ptr_bundle[pred_idx] = ptr_bundle_val;
-    if (is_insert) {
-      curr_bundle->ts_bundle[curr_idx] = lin_time;
-    }
-    pred_bundle->newest_idx = pred_idx;
     SOFTWARE_BARRIER;
+
     *lin_addr = lin_newval;  // Original linearization point.
     SOFTWARE_BARRIER;
-    pred_bundle->ts_bundle[pred_idx] = lin_time;
+
+    // Unblock waiting RQs.
+    if (is_insert) {
+      curr_bundle->head.ts = lin_time;
+    }
+    pred_bundle->head.ts = lin_time;
   }
 
   // Add keys to the result set. When bundles are used, range query traversal
   // becomes much simpler. The primary advantage is that any node touched will
   // be in our snapshot.
-  inline int traverse(const int tid, NodeType* curr, const K& high,
-                      K* const resultKeys, V* resultValues) {
+  inline int traverse(const int tid, NodeType *curr, const K &high,
+                      K *const resultKeys, V *resultValues) {
     const timestamp_t ts = start_traversal(tid);
     int cnt = 0;
     assert(curr != nullptr);

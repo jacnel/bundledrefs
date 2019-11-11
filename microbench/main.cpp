@@ -490,11 +490,7 @@ void *thread_rq(void *_id) {
   VALUE_TYPE *rqResultValues =
       new VALUE_TYPE[RQSIZE + RQ_DEBUGGING_MAX_KEYS_PER_NODE];
 
-#ifdef BUNDLE
-  INIT_RQ_THREAD(tid);
-#else
   INIT_THREAD(tid);
-#endif
   papi_create_eventset(tid);
   glob.running.fetch_add(1);
   __sync_synchronize();
@@ -548,11 +544,7 @@ void *thread_rq(void *_id) {
   }
 
   papi_stop_counters(tid);
-#ifdef BUNDLE
-  DEINIT_RQ_THREAD(tid);
-#else
   DEINIT_THREAD(tid);
-#endif
   delete[] rqResultKeys;
   delete[] rqResultValues;
   glob.__garbage += garbage;

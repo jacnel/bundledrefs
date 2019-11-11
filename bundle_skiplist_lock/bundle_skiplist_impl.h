@@ -175,7 +175,7 @@ bundle_skiplist<K, V, RecManager>::~bundle_skiplist() {
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_skiplist<K, V, RecManager>::initThread(const int tid, bool is_rq_thread) {
+void bundle_skiplist<K, V, RecManager>::initThread(const int tid) {
   if (init[tid])
     return;
   else
@@ -183,13 +183,10 @@ void bundle_skiplist<K, V, RecManager>::initThread(const int tid, bool is_rq_thr
 
   recmgr->initThread(tid);
   rqProvider->initThread(tid);
-  if (is_rq_thread) {
-    rqProvider->registerRQThread(tid);
-  }
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_skiplist<K, V, RecManager>::deinitThread(const int tid, bool is_rq_thread) {
+void bundle_skiplist<K, V, RecManager>::deinitThread(const int tid) {
   if (!init[tid])
     return;
   else
@@ -197,9 +194,6 @@ void bundle_skiplist<K, V, RecManager>::deinitThread(const int tid, bool is_rq_t
 
   recmgr->deinitThread(tid);
   rqProvider->deinitThread(tid);
-  if (is_rq_thread) {
-    rqProvider->unregisterRQThread(tid);
-  }
 }
 
 template <typename K, typename V, class RecManager>

@@ -88,8 +88,7 @@ bundle_lazylist<K, V, RecManager>::~bundle_lazylist() {
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_lazylist<K, V, RecManager>::initThread(const int tid,
-                                                   bool is_rq_thread) {
+void bundle_lazylist<K, V, RecManager>::initThread(const int tid) {
   if (init[tid])
     return;
   else
@@ -97,14 +96,10 @@ void bundle_lazylist<K, V, RecManager>::initThread(const int tid,
 
   recordmgr->initThread(tid);
   rqProvider->initThread(tid);
-  if (is_rq_thread) {
-    rqProvider->registerRQThread(tid);
-  }
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_lazylist<K, V, RecManager>::deinitThread(const int tid,
-                                                     bool is_rq_thread) {
+void bundle_lazylist<K, V, RecManager>::deinitThread(const int tid) {
   if (!init[tid])
     return;
   else
@@ -112,9 +107,6 @@ void bundle_lazylist<K, V, RecManager>::deinitThread(const int tid,
 
   recordmgr->deinitThread(tid);
   rqProvider->deinitThread(tid);
-  if (is_rq_thread) {
-    rqProvider->unregisterRQThread(tid);
-  }
 }
 
 template <typename K, typename V, class RecManager>
