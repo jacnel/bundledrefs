@@ -44,7 +44,7 @@ class node_t {
     volatile long long itime;
     volatile long long dtime;
     node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
-    rq_bundle_t<node_t>* volatile rqbundle;
+    Bundle<node_t>* volatile rqbundle;
   };
 
   template <typename RQProvider>

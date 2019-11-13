@@ -14,85 +14,111 @@ typedef long long timestamp_t;
 
 #define CPU_RELAX
 
-// A collection required by each data structure node to ensure correct range
-// query traversals. The RQTracker will only overwrite old reference when
-// it can ensure that no range query will require them. This is accomplished
-// because we limit the number of active range queries.
 template <typename NodeType>
-class rq_bundle_node_t {
+class BundleEntry {
  public:
   volatile timestamp_t ts_;
   NodeType *volatile ptr_;
-  struct rq_bundle_node *volatile next_;
+  BundleEntry *volatile next_;
 
-  explicit rq_bundle_node_t(timestamp_t ts, NodeType *ptr,
-                            rq_bundle_node_t *next)
+  explicit BundleEntry(timestamp_t ts, NodeType *ptr, BundleEntry *next)
       : ts_(ts), ptr_(ptr), next_(next) {}
 
-  void set_next(rq_bundle_node_t *const next) { next_ = next; }
+  void set_next(BundleEntry *const next) { next_ = next; }
 };
 
 template <typename NodeType>
-class rq_bundle_t {
+class Bundle {
  private:
-  rq_bundle_node_t *volatile head;
-  rq_bundle_node_t *tail;
+  BundleEntry<NodeType> *volatile head;
+  BundleEntry<NodeType> *tail;
+  volatile int updates;
+  volatile int last_recycled;
+  volatile int oldest_edge;
 
  public:
-  rq_bundle_t() {
+  Bundle() {
     // A sentinal node to help recycling.
-    head = new rq_bundle_node_t(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
+    head = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
     tail = head;
+    updates = 0;
+    last_recycled = 0;
+    oldest_edge = 0;
   }
 
   // Returns a reference to the node that immediately followed at timestamp ts.
   inline NodeType *volatile getPtrByTimestamp(timestamp_t ts) {
     // Start at head and work backwards until edge is found.
-    rq_bundle_node_t *curr = head;
+    BundleEntry<NodeType> *curr = head;
     // Wait if update is in progress.
-    while (curr->ts == BUNDLE_BUSY_TIMESTAMP)
+    while (curr->ts_ == BUNDLE_BUSY_TIMESTAMP)
       ;
-    while (curr->ts > ts) {
+    while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ > ts) {
       // TODO: Maybe, prefetch the next pointer.
-      curr = curr->next;
-      assert(curr != tail);
+      curr = curr->next_;
     }
-    return curr->ptr;
+    if (curr->ptr_ == nullptr) {
+      dump(ts);
+    }
+    return curr->ptr_;
   }
 
   // Inserts a new rq_bundle_node at the head of the bundle.
-  void insertAtHead(rq_bundle_node_t *const new_bundle_node) {
-    new_bundle_node.set_next(head);
+  void insertAtHead(BundleEntry<NodeType> *const new_bundle_node) {
+    new_bundle_node->set_next(head);
     head = new_bundle_node;
+    ++updates;
   }
 
-  // Recycles any edges that are older than ts. At the moment this must be
-  // ordered before adding a new bundle node.
-  inline void recycleEdges(timestamp_t ts) {
+  void updateHeadTs(timestamp_t ts) { head->ts_ = ts; }
+
+  void updateHeadPtr(NodeType *const ptr) { head->ptr_ = ptr; }
+
+  // Recycles any edges that are older than ts. At the moment this should be
+  // ordered before adding a new entry to the bundle.
+  void recycleEdges(timestamp_t ts) {
     // This should not be called while the bundle is being updated.
-    assert(head->ts_ != BUNDLE_BUSY_TIMESTAMP);
+    if (head->ts_ == BUNDLE_BUSY_TIMESTAMP) {
+      std::cout << "PHO" << std::endl;
+      dump(ts);
+      exit(1);
+    }
     // And it should not be called on a newly initialized bundle node.
     assert(head != tail);
     // If there are no active RQs then we can recycle all edges, but the newest
     // (i.e., head).
     if (ts == BUNDLE_NULL_TIMESTAMP) {
+      last_recycled = head->next_->ts_;
+      oldest_edge = head->ts_;
       head->next_ = tail;
     } else {
       // Traverse from head and remove nodes that are lower than ts.
-      rq_bundle_node_t *pred = nullptr;
-      rq_bundle_node_t *curr = head;
+      BundleEntry<NodeType> *curr = head;
       while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ >= ts) {
-        pred = curr;
         curr = curr->next_;
       }
-      // curr points to the first node that may be recylced given ts, so swing
-      // pred's next to the tail. Currently, assumed that external
-      // synchronization protects the bundle.
-      if (pred != nullptr) {
-        pred->next_ = tail;
-        // TODO: Handle memory leaks.
+      // curr points to the oldest edge required by any active RQs.
+      if (curr->ts_ != BUNDLE_NULL_TIMESTAMP) {
+        last_recycled = curr->next_->ts_;
+        oldest_edge = curr->ts_;
+        curr->next_ = tail;
       }
     }
+  }
+
+  void dump(timestamp_t ts) {
+    BundleEntry<NodeType> *curr = head;
+    std::cout << "(ts=" << ts << ") : ";
+    while (curr->ts_ != BUNDLE_NULL_TIMESTAMP) {
+      std::cout << "<" << curr->ts_ << "," << curr->ptr_ << "," << curr->next_
+                << ">";
+      if (curr->next_->ts_ != BUNDLE_NULL_TIMESTAMP) {
+        std::cout << " --> ";
+      }
+      curr = curr->next_;
+    }
+    std::cout << " [updates=" << updates << ", last_recycled=" << last_recycled
+              << ", oldest_edge=" << oldest_edge << "]" << std::endl;
   }
 };
 
@@ -168,10 +194,20 @@ class RQProvider {
       init_[tid] = !init_[tid];
   }
 
-  // Initializes a new node's bundle.
+  // Creates a new bundle for the given node.
+  inline void init_node(const int tid, NodeType *const node) {
+    node->rqbundle = new Bundle<NodeType>();
+    node->rqbundle->insertAtHead(
+        new BundleEntry<NodeType>(BUNDLE_BUSY_TIMESTAMP, nullptr, nullptr));
+  }
+
+  // Initializes a new node's bundle and adds a new entry with a
+  // NULL_TIMESTAMP. This is primarily used for sentinal nodes.
   inline void init_node(const int tid, NodeType *const node,
                         NodeType *const next) {
-    node->rqbundle = new rq_bundle_t<NodeType>();
+    node->rqbundle = new Bundle<NodeType>();
+    node->rqbundle->insertAtHead(
+        new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, next, nullptr));
   }
 
   // For each address addr that is modified by rq_linearize_update_at_write
@@ -205,7 +241,7 @@ class RQProvider {
 
  private:
   // Creates a snapshot of the current state of active RQs.
-  inline timestamp_t *get_oldest_active_rq(const int tid) {
+  inline timestamp_t get_oldest_active_rq() {
     timestamp_t oldest_active = BUNDLE_MAX_TIMESTAMP;
     timestamp_t curr_rq;
     for (int i = 0; i < num_processes_; ++i) {
@@ -252,28 +288,24 @@ class RQProvider {
   template <typename T>
   inline T linearize_update_at_write(const int tid, T volatile *const lin_addr,
                                      const T &lin_newval,
-                                     rq_bundle_t<NodeType> *const pred_bundle,
-                                     rq_bundle_t<NodeType> *const curr_bundle,
+                                     Bundle<NodeType> *const pred_bundle,
+                                     Bundle<NodeType> *const curr_bundle,
                                      NodeType *const pred_bundle_ptr,
                                      NodeType *const curr_bundle_ptr,
                                      bool is_insert) {
     // TODO: If we want to implement a lock free version this may have to
     // change.
     // TODO: Remove edge recylcing from the critical path of an update.
-    pred_bundle->recycleEdges(get_oldest_active_rq(tid));
+    pred_bundle->recycleEdges(get_oldest_active_rq());
     SOFTWARE_BARRIER;
     // BUSY_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
-    rq_bundle_node_t *pred_bundle_node =
-        new rq_bundle_node_t{BUNDLE_BUSY_TIMESTAMP, pred_bundle_ptr, nullptr};
-
+    BundleEntry<NodeType> *pred_bundle_node = new BundleEntry<NodeType>(
+        BUNDLE_BUSY_TIMESTAMP, pred_bundle_ptr, nullptr);
     pred_bundle->insertAtHead(pred_bundle_node);
-
     if (is_insert) {
-      rq_bundle_node_t *curr_bundle_node =
-          new rq_bundle_node_t{BUNDLE_BUSY_TIMESTAMP, curr_bundle_ptr, nullptr};
-      curr_bundle->insertAtHead(curr_bundle_node);
+      curr_bundle->updateHeadPtr(curr_bundle_ptr);
     }
     SOFTWARE_BARRIER;
 
@@ -286,9 +318,9 @@ class RQProvider {
 
     // Unblock waiting RQs.
     if (is_insert) {
-      curr_bundle->head.ts = lin_time;
+      curr_bundle->updateHeadTs(lin_time);
     }
-    pred_bundle->head.ts = lin_time;
+    pred_bundle->updateHeadTs(lin_time);
   }
 
   // Add keys to the result set. When bundles are used, range query traversal
@@ -302,6 +334,9 @@ class RQProvider {
     while (curr->key <= high && curr->key != KEY_MAX) {
       cnt += ds_->getKeys(tid, curr, resultKeys, resultValues);
       curr = curr->rqbundle->getPtrByTimestamp(ts);
+      if (curr == nullptr) {
+        exit(1);
+      }
     }
     end_traversal(tid);
     return cnt;

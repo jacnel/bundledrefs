@@ -34,7 +34,7 @@ class node_t {
                // used with the lock-free RQProvider (which requires all fields
                // that are modified at linearization points of operations to be
                // at least as large as a machine word)
-  rq_bundle_t<node_t>* volatile rqbundle;
+  Bundle<node_t>* volatile rqbundle;
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
@@ -206,10 +206,10 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       assert(curr->key != key);
       result = NO_VALUE;
       newnode = new_node(tid, key, val, curr);
-      rqProvider->init_node(tid, newnode, curr);
+      rqProvider->init_node(tid, newnode);
       rqProvider->linearize_update_at_write(tid, &pred->next, newnode,
                                             pred->rqbundle, newnode->rqbundle,
-                                            newnode, true);
+                                            newnode, curr, true);
       releaseLock(&(pred->lock));
       return result;
     }
@@ -252,7 +252,7 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
 
       rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL,
                                             pred->rqbundle, nullptr,
-                                            c_nxt, false);
+                                            c_nxt, nullptr, false);
 
       rqProvider->announce_physical_deletion(tid, {nullptr});
       rqProvider->write_addr(tid, &pred->next, c_nxt);
