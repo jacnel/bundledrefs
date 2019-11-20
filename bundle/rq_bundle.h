@@ -40,8 +40,7 @@ class Bundle {
   volatile int oldest_edge = 0;
 
  public:
-
-  inline void initBundle() {
+  explicit Bundle() {
     head_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
     tail_ = head_;
   }

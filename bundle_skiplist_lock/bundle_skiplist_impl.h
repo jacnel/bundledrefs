@@ -77,7 +77,6 @@ void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
   rqProvider->write_addr(tid, &p_node->marked, (long long)0);
   rqProvider->write_addr(tid, &p_node->fullyLinked, (long long)0);
   p_node->rqbundle = new Bundle<node_t<K,V>>();
-  p_node->rqbundle->initBundle();
 }
 
 template <typename K, typename V, class RecordMgr>

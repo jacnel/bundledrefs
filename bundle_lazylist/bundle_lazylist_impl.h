@@ -122,7 +122,6 @@ nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
   rqProvider->write_addr(tid, &nnode->marked, 0LL);
   nnode->lock = false;
   nnode->rqbundle = new Bundle<node_t<K,V>>();
-  nnode->rqbundle->initBundle();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
