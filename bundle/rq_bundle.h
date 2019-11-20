@@ -35,18 +35,15 @@ class Bundle {
  private:
   std::atomic<BundleEntry<NodeType> *> head_;
   BundleEntry<NodeType> *tail_;
-  volatile int updates;
-  volatile int last_recycled;
-  volatile int oldest_edge;
+  volatile int updates = 0;
+  volatile int last_recycled = 0;
+  volatile int oldest_edge = 0;
 
  public:
-  Bundle() {
-    // A sentinal node to help recycling.
+
+  inline void initBundle() {
     head_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
     tail_ = head_;
-    updates = 0;
-    last_recycled = 0;
-    oldest_edge = 0;
   }
 
   // Returns a reference to the node that immediately followed at timestamp ts.
@@ -201,14 +198,6 @@ class RQProvider {
       return;
     else
       init_[tid] = !init_[tid];
-  }
-
-  // Initializes a new node's bundle and adds a new entry with a
-  // NULL_TIMESTAMP. Only required during initial set up of sentinal nodes.
-  inline void init_node(const int tid, NodeType *const node,
-                        NodeType *const next) {
-    node->rqbundle->insertAtHead(
-        new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, next, nullptr));
   }
 
   // For each address addr that is modified by rq_linearize_update_at_write
