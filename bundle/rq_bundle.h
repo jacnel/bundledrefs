@@ -84,36 +84,36 @@ class Bundle {
   // Recycles any edges that are older than ts. At the moment this should be
   // ordered before adding a new entry to the bundle.
   inline void recycleEdges(timestamp_t ts) {
-  //   // And it should not be called on a newly initialized bundle node.
-  //   if (head_ == tail_) {
-  //     dump(ts);
-  //     exit(1);
-  //   }
-  //   // Read the head and wait for a concurrent update.
-  //   BundleEntry<NodeType> *const start = head_;
-  //   while (start->ts_ == BUNDLE_BUSY_TIMESTAMP)
-  //     ;
-  //   if (ts == BUNDLE_NULL_TIMESTAMP) {
-  //     // If there are no active RQs then we can recycle all edges, but the
-  //     // newest (i.e., head).
-  //     last_recycled = start->next_->ts_;
-  //     oldest_edge = start->ts_;
-  //     std::atomic::atomic_compare_exchange_weak(
-  //         (std::atomic<BundleEntry<NodeType> *> *)(&(start->next_)),
-  //         start->next_, tail_);
-  //   } else {
-  //     // Traverse from head and remove nodes that are lower than ts.
-  //     BundleEntry<NodeType> *curr = start;
-  //     while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ > ts) {
-  //       curr = curr->next_;
-  //     }
-  //     // curr points to the oldest edge required by any active RQs.
-  //     if (curr->ts_ != BUNDLE_NULL_TIMESTAMP) {
-  //       last_recycled = curr->next_->ts_;
-  //       oldest_edge = curr->ts_;
-  //       curr->next_ = tail_;
-  //     }
-  //   }
+    //   // And it should not be called on a newly initialized bundle node.
+    //   if (head_ == tail_) {
+    //     dump(ts);
+    //     exit(1);
+    //   }
+    //   // Read the head and wait for a concurrent update.
+    //   BundleEntry<NodeType> *const start = head_;
+    //   while (start->ts_ == BUNDLE_BUSY_TIMESTAMP)
+    //     ;
+    //   if (ts == BUNDLE_NULL_TIMESTAMP) {
+    //     // If there are no active RQs then we can recycle all edges, but the
+    //     // newest (i.e., head).
+    //     last_recycled = start->next_->ts_;
+    //     oldest_edge = start->ts_;
+    //     std::atomic::atomic_compare_exchange_weak(
+    //         (std::atomic<BundleEntry<NodeType> *> *)(&(start->next_)),
+    //         start->next_, tail_);
+    //   } else {
+    //     // Traverse from head and remove nodes that are lower than ts.
+    //     BundleEntry<NodeType> *curr = start;
+    //     while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ > ts) {
+    //       curr = curr->next_;
+    //     }
+    //     // curr points to the oldest edge required by any active RQs.
+    //     if (curr->ts_ != BUNDLE_NULL_TIMESTAMP) {
+    //       last_recycled = curr->next_->ts_;
+    //       oldest_edge = curr->ts_;
+    //       curr->next_ = tail_;
+    //     }
+    //   }
   }
 
   void __attribute__((noinline)) dump(timestamp_t ts) {
@@ -295,42 +295,39 @@ class RQProvider {
   template <typename T>
   inline T linearize_update_at_write(const int tid, T volatile *const lin_addr,
                                      const T &lin_newval,
-                                     Bundle<NodeType> *const pred_bundle,
-                                     Bundle<NodeType> *const new_bundle,
-                                     NodeType *const pred_entry_ptr_val,
-                                     NodeType *const new_entry_ptr_val,
-                                     bool is_insert) {
+                                     Bundle<NodeType> *const *const bundles,
+                                     NodeType *const *const ptrs) {
     // TODO: Remove edge recylcing from the critical path of an update.
     // pred_bundle->recycleEdges(get_oldest_active_rq());
     SOFTWARE_BARRIER;
     // BUSY_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
-    BundleEntry<NodeType> *pred_bundle_entry = new BundleEntry<NodeType>(
-        BUNDLE_BUSY_TIMESTAMP, pred_entry_ptr_val, nullptr);
-    pred_bundle->insertAtHead(pred_bundle_entry);
-    BundleEntry<NodeType> *new_bundle_entry;
-    if (is_insert) {
-      new_bundle_entry = new BundleEntry<NodeType>(BUNDLE_BUSY_TIMESTAMP,
-                                                   new_entry_ptr_val, nullptr);
-      new_bundle->insertAtHead(new_bundle_entry);
+    int i = 0;
+    Bundle<NodeType> *curr_bundle = bundles[i];
+    BundleEntry<NodeType> *entries[BUNDLE_MAX_BUNDLES_UPDATED + 1] = {nullptr, };
+    while (curr_bundle != nullptr) {
+      entries[i] = new BundleEntry<NodeType>(BUNDLE_BUSY_TIMESTAMP, ptrs[i], nullptr);
+      curr_bundle->insertAtHead(entries[i]);
+      curr_bundle = bundles[++i];
     }
     SOFTWARE_BARRIER;
 
     // Get update linearization timestamp.
     timestamp_t lin_time = get_update_lin_time();
     SOFTWARE_BARRIER;
-
     *lin_addr = lin_newval;  // Original linearization point.
     SOFTWARE_BARRIER;
 
     // Unblock waiting RQs.
     // TODO: Once the insertion is linearized, it is possible that another
     // operation updates the head before the timestamp is updated.
-    if (is_insert) {
-      new_bundle_entry->set_ts(lin_time);
+    i = 0;
+    BundleEntry<NodeType> *curr_entry = entries[i];
+    while (curr_entry != nullptr) {
+      curr_entry->set_ts(lin_time); 
+      curr_entry = entries[++i];
     }
-    pred_bundle_entry->set_ts(lin_time);
   }
 };
 

@@ -234,6 +234,7 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+RLU_OBJ_HEADER_SIZE)<<" including header="<<RLU_OBJ_HEADER_SIZE<<endl;
 
 #elif defined(BUNDLE_LIST)
+    #define BUNDLE_MAX_BUNDLES_UPDATED 2
     #include "record_manager.h"
     #include "rq_bundle.h"
     #include "bundle_lazylist_impl.h"
@@ -259,6 +260,7 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
     
 #elif defined(BUNDLE_SKIPLIST)
+    #define BUNDLE_MAX_BUNDLES_UPDATED 2
     #include "record_manager.h"
     #include "rq_bundle.h"
     #include "bundle_skiplist_impl.h"

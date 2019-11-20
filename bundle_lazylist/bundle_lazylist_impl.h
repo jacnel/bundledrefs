@@ -207,9 +207,11 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       result = NO_VALUE;
       newnode = new_node(tid, key, val, curr);
 
-      rqProvider->linearize_update_at_write(tid, &pred->next, newnode,
-                                            pred->rqbundle, newnode->rqbundle,
-                                            newnode, curr, true);
+      Bundle<node_t<K, V>>* bundles[] = {pred->rqbundle, newnode->rqbundle,
+                                         nullptr};
+      nodeptr ptrs[] = {newnode, curr, nullptr};
+      rqProvider->linearize_update_at_write(tid, &pred->next, newnode, bundles,
+                                            ptrs);
       releaseLock(&(pred->lock));
       recordmgr->enterQuiescentState(tid);
       return result;
@@ -251,9 +253,10 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
       result = curr->val;
       nodeptr c_nxt = curr->next;
 
-      rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL,
-                                            pred->rqbundle, nullptr, c_nxt,
-                                            nullptr, false);
+      Bundle<node_t<K, V>>* bundles[] = {pred->rqbundle, nullptr};
+      nodeptr ptrs[] = {c_nxt, nullptr};
+      rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL, bundles,
+                                            ptrs);
 
       rqProvider->announce_physical_deletion(tid, {nullptr});
       rqProvider->write_addr(tid, &pred->next, c_nxt);

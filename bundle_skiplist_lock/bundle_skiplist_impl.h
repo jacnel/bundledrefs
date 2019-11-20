@@ -331,9 +331,10 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       for (level = 0; level <= topLevel; level++) {
         p_preds[level]->p_next[level] = p_new_node;
       }
+      Bundle<node_t<K,V>> *bundles[] = {p_preds[0]->rqbundle, p_new_node->rqbundle, nullptr};
+      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr}; 
       rqProvider->linearize_update_at_write(
-          tid, &p_new_node->fullyLinked, (long long)1, p_preds[0]->rqbundle,
-          p_new_node->rqbundle, p_new_node, p_succs[0], true);
+          tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs);
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
 #endif
@@ -413,9 +414,10 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
       }
 
       if (valid) {
+        Bundle<node_t<K,V>> * bundles[] = {p_preds[0]->rqbundle, nullptr};
+        nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
         rqProvider->linearize_update_at_write(
-            tid, &p_victim->marked, (long long)1, p_preds[0]->rqbundle, nullptr,
-            p_victim->p_next[0], nullptr, false);
+            tid, &p_victim->marked, (long long)1, bundles, ptrs);
         // p_victim->marked = 1;
 
         rqProvider->announce_physical_deletion(tid, {nullptr});
