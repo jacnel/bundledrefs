@@ -1,7 +1,7 @@
 include ../config.mk
 PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_powerof2) -DCPU_FREQ_GHZ=$(cpu_freq_ghz) -DCPU_FREQ=$(cpu_freq_ghz)
 
-dict=CITRUS_SPIN
+dict=SKIPLISTLOCK_RQ_BUNDLE
 workload=TPCC
 
 CC=g++
@@ -66,9 +66,11 @@ INCLUDE += -I../rlu_linked_list
 INCLUDE += -I../skiplist_lock
 INCLUDE += -I../rq
 INCLUDE += -I../rq/snapcollector
+INCLUDE += -I../bundle
+INCLUDE += -I../bundle_skiplist_lock
 
 #CFLAGS += -DSKIP_PERMUTATIONS
-CFLAGS += $(INCLUDE) -DNOGRAPHITE=1 -O3 -DINDEX_STRUCT=IDX_$(dict) -DWORKLOAD=$(workload) #-Werror
+CFLAGS += $(INCLUDE) -DNOGRAPHITE=1 -O0 -DINDEX_STRUCT=IDX_$(dict) -DWORKLOAD=$(workload) #-Werror
 CFLAGS += -DSEGREGATE_MALLOC
 CFLAGS += $(readonly)
 #CFLAGS += -DREAD_ONLY

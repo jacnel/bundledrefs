@@ -24,7 +24,7 @@ export -f check_ds_technique
 
 check_ds_size() {
     ## args: ds k
-    if [ "$2" == "1000000" ] && [ "$1" != "abtree" ] ; then return 1 ; fi
+    if [ "$2" == "1000000" ] && [ "$1" != "abtree" ] && [ "$1" != "skiplistlock" ] ; then return 1 ; fi
     if [ "$2" == "100000" ] && [ "$1" != "bst" ] && [ "$1" != "citrus" ] && [ "$1" != "skiplistlock" ]  ; then return 1 ; fi
     if [ "$2" == "10000" ] && [ "$1" != "lflist" ] && [ "$1" != "lazylist" ] ; then return 1 ; fi
     return 0

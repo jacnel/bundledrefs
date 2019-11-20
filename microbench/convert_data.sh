@@ -1,8 +1,8 @@
 #! /bin/bash
 
-if [[ $# -ne 2 ]]; then
-  echo "Incorrect number of arguments (expected=1, actual=$#)."
-  echo "Usage: $0 <datadir> <num_trials>."
+if [[ $# -ne 3 ]]; then
+  echo "Incorrect number of arguments (expected=3, actual=$#)."
+  echo "Usage: $0 <datadir> <num_trials> <listname>."
   exit
 fi
 
@@ -13,10 +13,16 @@ cd ${datadir}
 ntrials=$2
 currfile=""
 
+listname=$3
+
 rqthrupt=0
 uthrupt=0
 totthrupt=0
 for filename in ${files}; do
+  # Only parse lines for given listname.
+  if [[ "$(echo ${filename} | grep ${listname})" == "" ]]; then
+    continue
+  fi
 
   rootname=$(echo ${filename} | sed -E 's/step[0-9]+[.]//' | sed -e 's/[.]trial.*//')
   if [[ ! "${rootname}" == "${currfile}" ]]; then
@@ -33,7 +39,7 @@ for filename in ${files}; do
     else
       echo "list,size,update_rate,max_rqs,rq_threads,rq_rate,num_wrk_threads,#rq txs,#update txs,#txs"
     fi
-    
+
     if [[ ${filename} == "summary.txt" ]]; then
       continue
     fi
@@ -41,7 +47,7 @@ for filename in ${files}; do
     currfile=${rootname}
 
     # Extract the values to organize for consumption by plotting script.
-    list=$(echo ${filename} | sed -e 's/.*[.]lazylist[.]//' | sed -e 's/[.].*//')
+    list=$(echo ${filename} | sed -e "s/.*[.]${listname}[.]/${listname}-/" | sed -e 's/[.].*//')
 
     size=$(cat ${filename} | grep 'MAXKEY=' | sed -e 's/.*=//')
     size=$((${size} / 2))

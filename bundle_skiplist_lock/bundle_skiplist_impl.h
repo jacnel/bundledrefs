@@ -76,11 +76,12 @@ void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
   p_node->lock = 0;
   rqProvider->write_addr(tid, &p_node->marked, (long long)0);
   rqProvider->write_addr(tid, &p_node->fullyLinked, (long long)0);
+  p_node->rqbundle = new Bundle<node_t<K, V>>();
 }
 
 template <typename K, typename V, class RecordMgr>
 nodeptr bundle_skiplist<K, V, RecordMgr>::allocateNode(const int tid) {
-  nodeptr nnode = recmgr->template allocate<node_t<K, V> >(tid);
+  nodeptr nnode = recmgr->template allocate<node_t<K, V>>(tid);
   if (nnode == NULL) {
     cout << "ERROR: out of memory" << endl;
     exit(-1);
@@ -133,9 +134,9 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
       KEY_MIN(_KEY_MIN),
       KEY_MAX(_KEY_MAX),
       NO_VALUE(NO_VALUE) {
-  rqProvider = new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
-                         RecManager, true, false>(numProcesses, this,
-                                                  recmgr);
+  rqProvider =
+      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
+                     RecManager, true, false>(numProcesses, this, recmgr);
 
   // note: initThread calls rqProvider->initThread
 
@@ -320,8 +321,8 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
                     ((long long)p_new_node) % (1 << 12));
 #endif
       initNode(tid, p_new_node, key, value, topLevel);
+
       // Initialize bundle with the lowest level pointer.
-      rqProvider->init_node(tid, p_new_node);
       p_new_node->topLevel = topLevel;
       for (level = 0; level <= topLevel; level++) {
         p_new_node->p_next[level] = p_succs[level];
@@ -421,7 +422,8 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         for (level = topLevel; level >= 0; level--) {
           p_preds[level]->p_next[level] = p_victim->p_next[level];
         }
-        rqProvider->physical_deletion_succeeded(tid, {nullptr});
+        nodeptr deletedNodes[] = {p_victim, nullptr};
+        rqProvider->physical_deletion_succeeded(tid, deletedNodes);
         ret = p_victim->val;
         sl_node_unlock(p_victim);
       } else {
@@ -456,21 +458,34 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   K* const resultKeys,
                                                   V* const resultValues) {
   //    cout<<"rangeQuery(lo="<<lo<<" hi="<<hi<<")"<<endl;
-  recmgr->leaveQuiescentState(tid, true);
-  // use the find function to find the low key
-  nodeptr pred = p_head;
-  nodeptr curr = NULL;
-  for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
-    curr = pred->p_next[level];
-    while (curr->key < lo) {
-      pred = curr;
+  timestamp_t ts;
+  int cnt = 0;
+  for (;;) {
+    recmgr->leaveQuiescentState(tid, true);
+    nodeptr pred = p_head;
+    nodeptr curr = nullptr;
+    for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];
+      while (curr->key < KEY_PRECEEDING(lo)) {
+        pred = curr;
+        curr = pred->p_next[level];
+      }
+    }
+    // Perform the traversal using the bundles.
+    ts = rqProvider->start_traversal(tid);
+    curr = pred->rqbundle->getPtrByTimestamp(ts);
+    while (curr != nullptr && curr->key <= hi) {
+      cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+      curr = curr->rqbundle->getPtrByTimestamp(ts);
+    }
+    rqProvider->end_traversal(tid);
+    recmgr->enterQuiescentState(tid);
+
+    // Traversal successful.
+    if (curr != nullptr) {
+      return cnt;
     }
   }
-  // Perform the traversal using the bundles.
-  int cnt = rqProvider->traverse(tid, pred, hi, resultKeys, resultValues);
-  recmgr->enterQuiescentState(tid);
-  return cnt;
 }
 
 #endif /* SKIPLIST_LOCK_IMPL_H */

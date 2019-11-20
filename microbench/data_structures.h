@@ -4,6 +4,7 @@
 const test_type NO_VALUE = -1;
 const test_type KEY_MIN = numeric_limits<test_type>::min()+1;
 const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less than max(), because the snap collector needs a reserved key larger than this!
+#define KEY_PRECEEDING(key) (key - 1)
 
 #ifdef RQ_SNAPCOLLECTOR
     #define RQ_SNAPCOLLECTOR_OBJECT_TYPES , SnapCollector<node_t<test_type, test_type>, test_type>, SnapCollector<node_t<test_type, test_type>, test_type>::NodeWrapper, ReportItem, CompactReportItem
@@ -254,7 +255,7 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define DEINIT_ALL
     #define BUNDLE
 
-    #define BUNDLE_OBJ_SIZE (sizeof(rq_bundle_t<node_t<test_type, test_type>>))
+    #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
     
 #elif defined(BUNDLE_SKIPLIST)
@@ -279,7 +280,7 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define DEINIT_ALL
     #define BUNDLE
 
-    #define BUNDLE_OBJ_SIZE (sizeof(rq_bundle_t<node_t<test_type, test_type>>))
+    #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
 
 

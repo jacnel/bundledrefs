@@ -593,7 +593,7 @@ void trial() {
   tsNap.tv_sec = 0;
   tsNap.tv_nsec = 10000000;  // 10ms
 
-  // start all threads
+  // start all threads. All worker threads are scheduled first, then range query threads.
   for (int i = 0; i < TOTAL_THREADS; ++i) {
     if (pthread_create(threads[i], NULL,
                        (i < WORK_THREADS ? thread_timed : thread_rq),

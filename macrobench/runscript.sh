@@ -16,7 +16,21 @@ machine=`hostname`
 outpath=data/rq_tpcc
 fsummary=$outpath/summary.txt
 
-mv $outpath $outpath.old
+if [[ ! $(mv $outpath $outpath.old) ]]; then
+  echo "Would you like to forcefully overwrite the existing version? (Y/n)"
+  read answer
+  while [[ "$(echo ${answer} | grep "^[yYnN]$")" == "" ]]; do
+    echo "(Y/n)"
+    read answer
+  done
+
+  if [[ "${answer}" == "Y" ]] || [[ "${answer}" == "y" ]]; then
+    mv -f $outpath $outpath.old
+    rm -rf $outpath
+  else
+    exit 0
+  fi
+fi
 mkdir -p $outpath
 
 cnt1=10000

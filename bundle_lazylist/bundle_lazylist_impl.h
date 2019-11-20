@@ -65,7 +65,7 @@ bundle_lazylist<K, V, RecManager>::bundle_lazylist(const int numProcesses,
   const int tid = 0;
   initThread(tid);
   nodeptr max = new_node(tid, KEY_MAX, 0, NULL);
-  rqProvider->init_node(tid, max, NULL);
+  rqProvider->init_node(tid, max, nullptr);
   head = new_node(tid, KEY_MIN, 0, max);
   rqProvider->init_node(tid, head, max);
 }
@@ -113,18 +113,18 @@ template <typename K, typename V, class RecManager>
 nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
                                                     const V& val,
                                                     nodeptr next) {
-  nodeptr nnode = recordmgr->template allocate<node_t<K, V> >(tid);
+  nodeptr nnode = recordmgr->template allocate<node_t<K, V>>(tid);
   if (nnode == NULL) {
     cout << "out of memory" << endl;
     exit(1);
   }
+  nnode->rqbundle = new Bundle<node_t<K, V>>();
   rqProvider->init_node(tid, nnode, next);
   nnode->key = key;
   nnode->val = val;
   rqProvider->write_addr(tid, &nnode->next, next);
   rqProvider->write_addr(tid, &nnode->marked, 0LL);
   nnode->lock = false;
-  nnode->rqbundle = nullptr;
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -206,11 +206,12 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       assert(curr->key != key);
       result = NO_VALUE;
       newnode = new_node(tid, key, val, curr);
-      rqProvider->init_node(tid, newnode);
+
       rqProvider->linearize_update_at_write(tid, &pred->next, newnode,
                                             pred->rqbundle, newnode->rqbundle,
                                             newnode, curr, true);
       releaseLock(&(pred->lock));
+      recordmgr->enterQuiescentState(tid);
       return result;
     }
     releaseLock(&(pred->lock));
@@ -251,12 +252,13 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
       nodeptr c_nxt = curr->next;
 
       rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL,
-                                            pred->rqbundle, nullptr,
-                                            c_nxt, nullptr, false);
+                                            pred->rqbundle, nullptr, c_nxt,
+                                            nullptr, false);
 
       rqProvider->announce_physical_deletion(tid, {nullptr});
       rqProvider->write_addr(tid, &pred->next, c_nxt);
-      rqProvider->physical_deletion_succeeded(tid, {nullptr});
+      nodeptr deletedNodes[] = {curr, nullptr};
+      rqProvider->physical_deletion_succeeded(tid, deletedNodes);
 
       releaseLock(&(curr->lock));
       releaseLock(&(pred->lock));
@@ -275,13 +277,31 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   K* const resultKeys,
                                                   V* const resultValues) {
   recordmgr->leaveQuiescentState(tid, true);
-  nodeptr curr = rqProvider->read_addr(tid, &head->next);
-  while (curr->key < lo) {
-    curr = rqProvider->read_addr(tid, &curr->next);
+  timestamp_t ts;
+  int cnt = 0;
+  for (;;) {
+    nodeptr pred = rqProvider->read_addr(tid, &head);
+    nodeptr curr = pred->next;
+    while (curr->key < KEY_PRECEEDING(lo)) {
+      pred = curr;
+      curr = rqProvider->read_addr(tid, &curr->next);
+    }
+    assert(curr != nullptr);
+
+    ts = rqProvider->start_traversal(tid);
+    curr = pred->rqbundle->getPtrByTimestamp(ts);
+    while (curr != nullptr && curr->key <= hi) {
+      cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+      curr = curr->rqbundle->getPtrByTimestamp(ts);
+    }
+    rqProvider->end_traversal(tid);
+    recordmgr->enterQuiescentState(tid);
+
+    // Traversal was completed successfully.
+    if (curr != nullptr) {
+      return cnt;
+    }
   }
-  int cnt = rqProvider->traverse(tid, curr, hi, resultKeys, resultValues);
-  recordmgr->enterQuiescentState(tid);
-  return cnt;
 }
 
 template <typename K, typename V, class RecManager>

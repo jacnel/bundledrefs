@@ -144,7 +144,6 @@ class bundle_skiplist {
     outputKeys[0] = node->key;
     outputValues[0] = node->val;
     return 1;
-    return 0;
   }
 
   bool isInRange(const K& key, const K& lo, const K& hi) {
