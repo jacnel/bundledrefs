@@ -65,9 +65,7 @@ bundle_lazylist<K, V, RecManager>::bundle_lazylist(const int numProcesses,
   const int tid = 0;
   initThread(tid);
   nodeptr max = new_node(tid, KEY_MAX, 0, NULL);
-  rqProvider->init_node(tid, max, nullptr);
   head = new_node(tid, KEY_MIN, 0, max);
-  rqProvider->init_node(tid, head, max);
 }
 
 template <typename K, typename V, class RecManager>
@@ -118,13 +116,13 @@ nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
     cout << "out of memory" << endl;
     exit(1);
   }
-  nnode->rqbundle = new Bundle<node_t<K, V>>();
-  rqProvider->init_node(tid, nnode, next);
   nnode->key = key;
   nnode->val = val;
   rqProvider->write_addr(tid, &nnode->next, next);
   rqProvider->write_addr(tid, &nnode->marked, 0LL);
   nnode->lock = false;
+  nnode->rqbundle = new Bundle<node_t<K,V>>();
+  nnode->rqbundle->initBundle();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif

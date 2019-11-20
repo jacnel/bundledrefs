@@ -76,7 +76,8 @@ void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
   p_node->lock = 0;
   rqProvider->write_addr(tid, &p_node->marked, (long long)0);
   rqProvider->write_addr(tid, &p_node->fullyLinked, (long long)0);
-  p_node->rqbundle = new Bundle<node_t<K, V>>();
+  p_node->rqbundle = new Bundle<node_t<K,V>>();
+  p_node->rqbundle->initBundle();
 }
 
 template <typename K, typename V, class RecordMgr>
@@ -146,11 +147,9 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
 
   p_tail = allocateNode(dummyTid);
   initNode(dummyTid, p_tail, KEY_MAX, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  rqProvider->init_node(dummyTid, p_tail, nullptr);
 
   p_head = allocateNode(dummyTid);
   initNode(dummyTid, p_head, KEY_MIN, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  rqProvider->init_node(dummyTid, p_head, p_tail);
 
   for (i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
     p_head->p_next[i] = p_tail;
@@ -331,10 +330,11 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       for (level = 0; level <= topLevel; level++) {
         p_preds[level]->p_next[level] = p_new_node;
       }
-      Bundle<node_t<K,V>> *bundles[] = {p_preds[0]->rqbundle, p_new_node->rqbundle, nullptr};
-      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr}; 
-      rqProvider->linearize_update_at_write(
-          tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs);
+      Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle,
+                                         p_new_node->rqbundle, nullptr};
+      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
+      rqProvider->linearize_update_at_write(tid, &p_new_node->fullyLinked,
+                                            (long long)1, bundles, ptrs);
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
 #endif
@@ -414,10 +414,10 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
       }
 
       if (valid) {
-        Bundle<node_t<K,V>> * bundles[] = {p_preds[0]->rqbundle, nullptr};
+        Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle, nullptr};
         nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
-        rqProvider->linearize_update_at_write(
-            tid, &p_victim->marked, (long long)1, bundles, ptrs);
+        rqProvider->linearize_update_at_write(tid, &p_victim->marked,
+                                              (long long)1, bundles, ptrs);
         // p_victim->marked = 1;
 
         rqProvider->announce_physical_deletion(tid, {nullptr});
