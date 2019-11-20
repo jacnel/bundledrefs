@@ -463,6 +463,7 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   int cnt = 0;
   for (;;) {
     recmgr->leaveQuiescentState(tid, true);
+    ts = rqProvider->start_traversal(tid);
     nodeptr pred = p_head;
     nodeptr curr = nullptr;
     for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
@@ -473,7 +474,6 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
       }
     }
     // Perform the traversal using the bundles.
-    ts = rqProvider->start_traversal(tid);
     curr = pred->rqbundle->getPtrByTimestamp(ts);
     while (curr != nullptr && curr->key <= hi) {
       cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
