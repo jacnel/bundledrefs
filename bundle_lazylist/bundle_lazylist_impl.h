@@ -280,6 +280,7 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   timestamp_t ts;
   int cnt = 0;
   for (;;) {
+    ts = rqProvider->start_traversal(tid);
     nodeptr pred = rqProvider->read_addr(tid, &head);
     nodeptr curr = pred->next;
     while (curr->key < KEY_PRECEEDING(lo)) {
@@ -288,7 +289,6 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     }
     assert(curr != nullptr);
 
-    ts = rqProvider->start_traversal(tid);
     curr = pred->rqbundle->getPtrByTimestamp(ts);
     while (curr != nullptr && curr->key <= hi) {
       cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
@@ -302,6 +302,23 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
       return cnt;
     }
   }
+
+  // recordmgr->leaveQuiescentState(tid, true);
+  // int cnt = 0;
+  // timestamp_t ts = rqProvider->start_traversal(tid);
+  // nodeptr curr = rqProvider->read_addr(tid, &head);
+  // // Traverse using timestamps to the first node in the range.
+  // while (curr->key < KEY_PRECEEDING(lo)) {
+  //   curr = curr->rqbundle->getPtrByTimestamp(ts);
+  // }
+  // // Traverse range.
+  // while (curr != nullptr && curr->key <= hi) {
+  //   cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+  //   curr = curr->rqbundle->getPtrByTimestamp(ts);
+  // }
+  // rqProvider->end_traversal(tid);
+  // recordmgr->enterQuiescentState(tid);
+  // return cnt;
 }
 
 template <typename K, typename V, class RecManager>
