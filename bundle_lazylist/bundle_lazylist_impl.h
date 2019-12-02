@@ -38,7 +38,7 @@ class node_t {
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
-    return prov->read_addr(tid, (casword_t*)&marked);
+    return marked;
   }
   // uint8_t padding[PREFETCH_SIZE_BYTES - sizeof (skey_t) - sizeof (sval_t) -
   // sizeof (struct nodeptr) - sizeof (lock_type) - sizeof (uint8_t) ];
@@ -118,10 +118,10 @@ nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
   }
   nnode->key = key;
   nnode->val = val;
-  rqProvider->write_addr(tid, &nnode->next, next);
-  rqProvider->write_addr(tid, &nnode->marked, 0LL);
+  nnode->next = next;
+  nnode->marked = 0LL;
   nnode->lock = false;
-  nnode->rqbundle = new Bundle<node_t<K,V>>();
+  nnode->rqbundle = new Bundle<node_t<K, V>>();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -132,9 +132,9 @@ template <typename K, typename V, class RecManager>
 inline int bundle_lazylist<K, V, RecManager>::validateLinks(const int tid,
                                                             nodeptr pred,
                                                             nodeptr curr) {
-  return (!rqProvider->read_addr(tid, &pred->marked) &&
-          !rqProvider->read_addr(tid, &curr->marked) &&
-          (rqProvider->read_addr(tid, &pred->next) == curr));
+  return (!pred->marked &&
+          !curr->marked &&
+          (pred->next == curr));
 }
 
 template <typename K, typename V, class RecManager>
@@ -142,11 +142,11 @@ bool bundle_lazylist<K, V, RecManager>::contains(const int tid, const K& key) {
   recordmgr->leaveQuiescentState(tid, true);
   nodeptr curr = head;
   while (curr->key < key) {
-    curr = rqProvider->read_addr(tid, &curr->next);
+    curr = curr->next;
   }
 
   V res = NO_VALUE;
-  if ((curr->key == key) && !rqProvider->read_addr(tid, &curr->marked)) {
+  if ((curr->key == key) && !curr->marked) {
     res = curr->val;
   }
   recordmgr->enterQuiescentState(tid);
@@ -163,16 +163,15 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
   while (true) {
     recordmgr->leaveQuiescentState(tid);
     pred = head;
-    curr = rqProvider->read_addr(tid, &pred->next);
+    curr = pred->next;
     while (curr->key < key) {
       pred = curr;
-      curr = rqProvider->read_addr(tid, &curr->next);
+      curr = curr->next;
     }
     acquireLock(&(pred->lock));
     if (validateLinks(tid, pred, curr)) {
       if (curr->key == key) {
-        if (rqProvider->read_addr(tid,
-                                  &curr->marked)) {  // this is an optimization
+        if (curr->marked) {  // this is an optimization
           releaseLock(&(pred->lock));
           recordmgr->enterQuiescentState(tid);
           continue;
@@ -230,10 +229,10 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
   while (true) {
     recordmgr->leaveQuiescentState(tid);
     pred = head;
-    curr = rqProvider->read_addr(tid, &pred->next);
+    curr = pred->next;
     while (curr->key < key) {
       pred = curr;
-      curr = rqProvider->read_addr(tid, &curr->next);
+      curr = curr->next;
     }
 
     if (curr->key != key) {
@@ -255,8 +254,7 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
       rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL, bundles,
                                             ptrs);
 
-      rqProvider->announce_physical_deletion(tid, {nullptr});
-      rqProvider->write_addr(tid, &pred->next, c_nxt);
+      pred->next = c_nxt;
       nodeptr deletedNodes[] = {curr, nullptr};
       rqProvider->physical_deletion_succeeded(tid, deletedNodes);
 
@@ -281,17 +279,19 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   int cnt = 0;
   for (;;) {
     ts = rqProvider->start_traversal(tid);
-    nodeptr pred = rqProvider->read_addr(tid, &head);
+    nodeptr pred = head;
     nodeptr curr = pred->next;
-    while (curr->key < KEY_PRECEEDING(lo)) {
+    while (curr->key < lo) {
       pred = curr;
-      curr = rqProvider->read_addr(tid, &curr->next);
+      curr = curr->next;
     }
     assert(curr != nullptr);
 
     curr = pred->rqbundle->getPtrByTimestamp(ts);
     while (curr != nullptr && curr->key <= hi) {
-      cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+      if (curr->key >= lo) {
+        cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+      }
       curr = curr->rqbundle->getPtrByTimestamp(ts);
     }
     rqProvider->end_traversal(tid);

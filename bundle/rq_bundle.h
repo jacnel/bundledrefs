@@ -8,7 +8,7 @@
 #include "plaf.h"
 #include "rq_debugging.h"
 
-#define CPU_RELAX
+#define CPU_RELAX asm volatile("pause\n" ::: "memory")
 
 template <typename NodeType>
 class BundleEntry {
@@ -45,36 +45,47 @@ class Bundle {
     tail_ = head_;
   }
 
+  inline BundleEntry<NodeType> *getHead() { return head_; }
+
   // Returns a reference to the node that immediately followed at timestamp ts.
   inline NodeType *volatile getPtrByTimestamp(timestamp_t ts) {
     // Start at head and work backwards until edge is found.
     BundleEntry<NodeType> *curr = head_;
     // bool once = false;
-    while (curr->ts_ == BUNDLE_BUSY_TIMESTAMP)
-      ;
-    while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ > ts) {
-      // TODO: Maybe, prefetch the next pointer.
-      curr = curr->next_;
+    while (curr->ts_ == BUNDLE_BUSY_TIMESTAMP) {
+      CPU_RELAX;
     }
-    if (curr->ts_ == BUNDLE_BUSY_TIMESTAMP) {
-      dump(ts);
-      exit(1);
+    while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ > ts) {
+      curr = curr->next_;
     }
     return curr->ptr_;
   }
 
   // Inserts a new rq_bundle_node at the head of the bundle.
   inline void insertAtHead(BundleEntry<NodeType> *new_entry) {
-    for (;;) {
-      BundleEntry<NodeType> *expected = head_;
+    BundleEntry<NodeType> *expected = head_;
+    while (true) {
       new_entry->set_next(expected);
-      while (expected->ts_ == BUNDLE_BUSY_TIMESTAMP)
-        ;
+      while (expected->ts_ == BUNDLE_BUSY_TIMESTAMP) {
+        CPU_RELAX;
+      }
       if (head_.compare_exchange_weak(expected, new_entry)) {
         ++updates;
         return;
       }
+      expected = head_;
     }
+  }
+
+  // [UNSAFE] Returns the number of bundle entries.
+  inline int getSize() {
+    int size = 0;
+    BundleEntry<NodeType> *curr = head_;
+    while (curr->ts_ != BUNDLE_NULL_TIMESTAMP) {
+      ++size;
+      curr = curr->next_;
+    }
+    return size;
   }
 
   // Recycles any edges that are older than ts. At the moment this should be
@@ -150,7 +161,10 @@ class RQProvider {
       volatile timestamp_t rq_lin_time;
       volatile char pad0[PREFETCH_SIZE_BYTES];
       std::atomic<bool> rq_flag;
-      // TODO: Provide debug statistics.
+#ifdef BUNDLE_TIMESTAMP_RELAXATION
+      volatile char pad1[PREFETCH_SIZE_BYTES];
+      volatile long local_timestamp;
+#endif
     } data;
     volatile char bytes[__THREAD_DATA_SIZE];
   } __attribute__((aligned(__THREAD_DATA_SIZE)));
@@ -179,6 +193,7 @@ class RQProvider {
       rq_thread_data_[i].data.rq_flag = false;
     }
     curr_timestamp_ = BUNDLE_NULL_TIMESTAMP;
+    // TODO: Implement cleanup thread.
   }
 
   ~RQProvider() { delete[] rq_thread_data_; }
@@ -202,8 +217,6 @@ class RQProvider {
   // For each address addr that is modified by rq_linearize_update_at_write
   // or rq_linearize_update_at_cas, you must replace any initialization of
   // addr with invocations of rq_write_addr.
-  //
-  // TODO: This was kept around to make porting RQProvider easier.
   template <typename T>
   inline void write_addr(const int tid, T volatile *const addr, const T val) {
     *addr = val;
@@ -212,18 +225,10 @@ class RQProvider {
   // For each address addr that is modified by rq_linearize_update_at_write
   // or rq_linearize_update_at_cas, you must replace any reads of addr with
   // invocations of rq_read_addr
-  //
-  // TODO: This was kept around to make porting RQProvider easier.
   template <typename T>
   inline T read_addr(const int tid, T volatile *const addr) {
     return *addr;
   }
-
-  // TODO: These were also kept around to make life easier.
-  inline void announce_physical_deletion(const int tid,
-                                         NodeType *const *const deletedNodes) {}
-  inline void physical_deletion_failed(const int tid,
-                                       NodeType *const *const deletedNodes) {}
 
   inline void physical_deletion_succeeded(const int tid,
                                           NodeType *const *const deletedNodes) {
@@ -255,9 +260,17 @@ class RQProvider {
     return oldest_active;
   }
 
-  inline timestamp_t get_update_lin_time() {
-    assert(curr_timestamp_ + 1 != BUNDLE_MAX_TIMESTAMP);
+  inline timestamp_t get_update_lin_time(int tid) {
+#ifdef BUNDLE_TIMESTAMP_RELAXATION
+    if ((rq_thread_data_[tid].data.local_timestamp %
+         BUNDLE_TIMESTAMP_RELAXATION - 1) == 0) {
+      return curr_timestamp_.fetch_add(1);
+    } else {
+      ++rq_thread_data_[tid].data.local_timestamp;
+    }
+#else
     return curr_timestamp_.fetch_add(1);
+#endif
   }
 
  public:
@@ -285,35 +298,33 @@ class RQProvider {
                                      const T &lin_newval,
                                      Bundle<NodeType> *const *const bundles,
                                      NodeType *const *const ptrs) {
-    // TODO: Remove edge recylcing from the critical path of an update.
-    // pred_bundle->recycleEdges(get_oldest_active_rq());
-    SOFTWARE_BARRIER;
     // BUSY_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
     int i = 0;
     Bundle<NodeType> *curr_bundle = bundles[i];
-    BundleEntry<NodeType> *entries[BUNDLE_MAX_BUNDLES_UPDATED + 1] = {nullptr, };
+    BundleEntry<NodeType> *entries[BUNDLE_MAX_BUNDLES_UPDATED + 1] = {
+        nullptr,
+    };
     while (curr_bundle != nullptr) {
-      entries[i] = new BundleEntry<NodeType>(BUNDLE_BUSY_TIMESTAMP, ptrs[i], nullptr);
+      entries[i] =
+          new BundleEntry<NodeType>(BUNDLE_BUSY_TIMESTAMP, ptrs[i], nullptr);
       curr_bundle->insertAtHead(entries[i]);
       curr_bundle = bundles[++i];
     }
     SOFTWARE_BARRIER;
 
     // Get update linearization timestamp.
-    timestamp_t lin_time = get_update_lin_time();
+    timestamp_t lin_time = get_update_lin_time(tid);
     SOFTWARE_BARRIER;
     *lin_addr = lin_newval;  // Original linearization point.
     SOFTWARE_BARRIER;
 
     // Unblock waiting RQs.
-    // TODO: Once the insertion is linearized, it is possible that another
-    // operation updates the head before the timestamp is updated.
     i = 0;
     BundleEntry<NodeType> *curr_entry = entries[i];
     while (curr_entry != nullptr) {
-      curr_entry->set_ts(lin_time); 
+      curr_entry->set_ts(lin_time);
       curr_entry = entries[++i];
     }
   }

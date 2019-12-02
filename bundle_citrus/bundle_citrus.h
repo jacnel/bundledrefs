@@ -25,15 +25,18 @@
 #ifndef _DICTIONARY_H_
 #define _DICTIONARY_H_
 
-#include <stdbool.h>
-#include <utility>
 #include <signal.h>
+#include <stdbool.h>
+#include <sstream>
+#include <stack>
+#include <unordered_set>
+#include <utility>
 
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
-    // define BEFORE including rq_provider.h
-    #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
+// define BEFORE including rq_provider.h
+#define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
 #endif
-#include "rq_provider.h"
+#include "rq_bundle.h"
 using namespace std;
 
 #define LOGICAL_DELETION_USAGE false
@@ -42,147 +45,211 @@ using namespace std;
 
 template <typename K, typename V>
 struct node_t {
-    K key;
-    V value;
-    node_t<K,V> * volatile child[2];
-    volatile long long itime; // for use by range query algorithm
-    volatile long long dtime; // for use by range query algorithm
-    int tag[2];
-    volatile int lock;
-    bool marked;
+  K key;
+  V value;
+  node_t<K, V>* volatile child[2];
+  volatile long long itime;  // for use by range query algorithm
+  volatile long long dtime;  // for use by range query algorithm
+  int tag[2];
+  volatile int lock;
+  bool marked;
 
-    Bundle<node_t<K,V>> *rqbundle[2];
+  Bundle<node_t<K, V>>* rqbundle[2];
 };
 
-#define nodeptr node_t<K,V> *
+#define nodeptr node_t<K, V>*
 
 template <typename K, typename V, class RecManager>
 class bundle_citrustree {
-private:
-    RecManager * const recordmgr;
-    RQProvider<K, V, node_t<K,V>, bundle_citrustree<K,V,RecManager>, RecManager, LOGICAL_DELETION_USAGE, false> * const rqProvider;
-    
-    volatile char padding0[PREFETCH_SIZE_BYTES];
-    nodeptr root;
-    volatile char padding1[PREFETCH_SIZE_BYTES];
-    
+ private:
+  RecManager* const recordmgr;
+  RQProvider<K, V, node_t<K, V>, bundle_citrustree<K, V, RecManager>,
+             RecManager, LOGICAL_DELETION_USAGE, false>* const rqProvider;
+
+  volatile char padding0[PREFETCH_SIZE_BYTES];
+  nodeptr root;
+  volatile char padding1[PREFETCH_SIZE_BYTES];
+
 #ifdef USE_DEBUGCOUNTERS
-    debugCounters * const counters;
+  debugCounters* const counters;
 #endif
-    
-    inline nodeptr newNode(const int tid, K key, V value);
-    long long debugKeySum(nodeptr root);
-    
-    bool validate(const int tid, nodeptr prev, int tag, nodeptr curr, int direction);
 
-    void dfsDeallocateBottomUp(nodeptr const u, int * numNodes) {
-        if (u == NULL) return;
-        if (u->child[0]) dfsDeallocateBottomUp(u->child[0], numNodes);
-        if (u->child[1]) dfsDeallocateBottomUp(u->child[1], numNodes);
-        MEMORY_STATS ++(*numNodes);
-        recordmgr->deallocate(0 /* tid */, u);
-    }
-    
-    const V doInsert(const int tid, const K& key, const V& value, bool onlyIfAbsent);
-    int init[MAX_TID_POW2] = {0,};
+  inline nodeptr newNode(const int tid, K key, V value);
+  long long debugKeySum(nodeptr root);
 
-public:
-    const K NO_KEY;
-    const V NO_VALUE;
-    bundle_citrustree(const K max_key, const V NO_VALUE, int numProcesses);
-    ~bundle_citrustree();
+  bool validate(const int tid, nodeptr prev, int tag, nodeptr curr,
+                int direction);
 
-    const V insert(const int tid, const K& key, const V& value);
-    const V insertIfAbsent(const int tid, const K& key, const V& value);
-    const pair<V, bool> erase(const int tid, const K& key);
-    const pair<V, bool> find(const int tid, const K& key);
-    int rangeQuery(const int tid, const K& lo, const K& hi, K * const resultKeys, V * const resultValues);
-    bool contains(const int tid, const K& key);
-    int size(); // warning: this is a linear time operation, and is not linearizable
+  void dfsDeallocateBottomUp(nodeptr const u, int* numNodes) {
+    if (u == NULL) return;
+    if (u->child[0]) dfsDeallocateBottomUp(u->child[0], numNodes);
+    if (u->child[1]) dfsDeallocateBottomUp(u->child[1], numNodes);
+    MEMORY_STATS++(*numNodes);
+    recordmgr->deallocate(0 /* tid */, u);
+  }
 
-    node_t<K,V> * debug_getEntryPoint() { return root; }
-    
-    /**
-     * BEGIN FUNCTIONS FOR RANGE QUERY SUPPORT
-     */
-        
-    inline bool isLogicallyDeleted(const int tid, nodeptr node) {
-        return false;
-    }
-    
-    inline bool isLogicallyInserted(const int tid, nodeptr node) {
-        return true;
-    }
+  const V doInsert(const int tid, const K& key, const V& value,
+                   bool onlyIfAbsent);
+  int init[MAX_TID_POW2] = {
+      0,
+  };
 
-    inline int getKeys(const int tid, node_t<K,V> * node, K * const outputKeys, V * const outputValues) {
-        if (node->key >= NO_KEY) return 0;
-        outputKeys[0] = node->key;
-        outputValues[0] = node->value;
-        return 1;
-    }
-    
-    bool isInRange(const K& key, const K& lo, const K& hi) {
-        return (key != NO_KEY && lo <= key && key <= hi);
-    }
+ public:
+  const K NO_KEY;
+  const V NO_VALUE;
+  bundle_citrustree(const K max_key, const V NO_VALUE, int numProcesses);
+  ~bundle_citrustree();
 
-    /**
-     * END FUNCTIONS FOR RANGE QUERY SUPPORT
-     */
+  const V insert(const int tid, const K& key, const V& value);
+  const V insertIfAbsent(const int tid, const K& key, const V& value);
+  const pair<V, bool> erase(const int tid, const K& key);
+  const pair<V, bool> find(const int tid, const K& key);
+  int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
+                 V* const resultValues);
+  bool contains(const int tid, const K& key);
+  int size();  // warning: this is a linear time operation, and is not
+               // linearizable
+
+  node_t<K, V>* debug_getEntryPoint() { return root; }
+
+  /**
+   * BEGIN FUNCTIONS FOR RANGE QUERY SUPPORT
+   */
+
+  inline bool isLogicallyDeleted(const int tid, nodeptr node) { return false; }
+
+  inline bool isLogicallyInserted(const int tid, nodeptr node) { return true; }
+
+  inline int getKeys(const int tid, node_t<K, V>* node, K* const outputKeys,
+                     V* const outputValues) {
+    if (node->key >= NO_KEY) return 0;
+    outputKeys[0] = node->key;
+    outputValues[0] = node->value;
+    return 1;
+  }
+
+  bool isInRange(const K& key, const K& lo, const K& hi) {
+    return (key != NO_KEY && lo <= key && key <= hi);
+  }
+
+  /**
+   * END FUNCTIONS FOR RANGE QUERY SUPPORT
+   */
 #ifdef USE_DEBUGCOUNTERS
-    debugCounters * debugGetCounters() { return counters; }
+  debugCounters* debugGetCounters() { return counters; }
 #endif
-    long long debugKeySum();
-    void clearCounters() {
+  long long debugKeySum();
+  void clearCounters() {
 #ifdef USE_DEBUGCOUNTERS
-        counters->clear();
+    counters->clear();
 #endif
-        //recmgr->clearCounters();
-}
-    
-    bool validate(int unused, bool unused2) {
-        return true;
-    }
-    
-    RecManager * const debugGetRecMgr() {
-        return recordmgr;
-    }
-    
-    long long getSizeInNodes(nodeptr const u) {
-        if (u == NULL) return 0;
-        return 1 + getSizeInNodes(u->child[0])
-                 + getSizeInNodes(u->child[1]);
-    }
-    long long getSizeInNodes() {
-        return getSizeInNodes(root);
-    }
-    string getSizeString() {
-        stringstream ss;
-        ss<<getSizeInNodes()<<" nodes in data structure";
-        return ss.str();
-    }
-    long long getSize() {
-        return getSizeInNodes();
-    }
-    
-    /**
-     * This function must be called once by each thread that will
-     * invoke any functions on this class.
-     * 
-     * It must be okay that we do this with the main thread and later with another thread!!!
-     */
-    void initThread(const int tid) {
-        if (init[tid]) return; else init[tid] = !init[tid];
+    // recmgr->clearCounters();
+  }
 
-        recordmgr->initThread(tid);
-        rqProvider->initThread(tid);
-    }
-    
-    void deinitThread(const int tid) {
-        if (!init[tid]) return; else init[tid] = !init[tid];
+  bool validate(int unused, bool unused2) { return true; }
 
-        rqProvider->deinitThread(tid);
-        recordmgr->deinitThread(tid);
-    }    
+  RecManager* const debugGetRecMgr() { return recordmgr; }
+
+  long long getSizeInNodes(nodeptr const u) {
+    if (u == NULL) return 0;
+    return 1 + getSizeInNodes(u->child[0]) + getSizeInNodes(u->child[1]);
+  }
+  long long getSizeInNodes() { return getSizeInNodes(root); }
+  string getSizeString() {
+    stringstream ss;
+    ss << getSizeInNodes() << " nodes in data structure";
+    return ss.str();
+  }
+  long long getSize() { return getSizeInNodes(); }
+
+  string getBundleStatsString() {
+    unsigned int max = -1;
+    long num_nodes = 0;
+    long left_total = 0;
+    long right_total = 0;
+    stack<nodeptr> s;
+    unordered_set<node_t<K, V>*> unique;
+    nodeptr curr = root;
+    s.push((nodeptr)curr->child[0]);  // Two sentinals are at the root.
+    while (!s.empty()) {
+      // Try to add the current node to set of unique nodes.
+      curr = s.top();
+      s.pop();
+      auto result = unique.insert(curr);
+      if (result.second) {
+        // If this is an unseen node, update stats.
+        ++num_nodes;
+        int left = curr->rqbundle[0]->getSize();
+        int right = curr->rqbundle[1]->getSize();
+        if (left >= right && left > max) {
+          max = left;
+        } else if (right > max) {
+          max = right;
+        }
+        left_total += left;
+        right_total += right;
+
+        // Add all nodes in the bundle to the stack, if we haven't seen this
+        // node before.
+        BundleEntry<node_t<K, V>>* left_bundle_entry =
+            curr->rqbundle[0]->getHead();
+        BundleEntry<node_t<K, V>>* right_bundle_entry =
+            curr->rqbundle[1]->getHead();
+        while (left_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP ||
+               right_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
+          if (left_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
+            if (left_bundle_entry->ptr_ != nullptr) {
+              s.push((nodeptr)left_bundle_entry->ptr_);
+            }
+            left_bundle_entry = left_bundle_entry->next_;
+          }
+          if (right_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
+            if (right_bundle_entry->ptr_ != nullptr) {
+              s.push((nodeptr)right_bundle_entry->ptr_);
+            }
+            right_bundle_entry = right_bundle_entry->next_;
+          }
+        }
+      }
+    }
+
+    stringstream ss;
+    ss << "total reachable nodes         : " << num_nodes << endl;
+    ss << "average bundle size           : "
+       << ((left_total + right_total) / (double)num_nodes) << endl;
+    ss << "average left bundle size      : " << (left_total / (double)num_nodes)
+       << endl;
+    ss << "average right bundle size     : "
+       << (right_total / (double)num_nodes) << endl;
+    return ss.str();
+  }
+
+  /**
+   * This function must be called once by each thread that will
+   * invoke any functions on this class.
+   *
+   * It must be okay that we do this with the main thread and later with another
+   * thread!!!
+   */
+  void initThread(const int tid) {
+    if (init[tid])
+      return;
+    else
+      init[tid] = !init[tid];
+
+    recordmgr->initThread(tid);
+    rqProvider->initThread(tid);
+  }
+
+  void deinitThread(const int tid) {
+    if (!init[tid])
+      return;
+    else
+      init[tid] = !init[tid];
+
+    rqProvider->deinitThread(tid);
+    recordmgr->deinitThread(tid);
+  }
 };
 
 #endif

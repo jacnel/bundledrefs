@@ -1,6 +1,9 @@
 #ifndef SKIPLIST_H
 #define SKIPLIST_H
 
+#include <unordered_set>
+#include <stack>
+
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
 // define BEFORE including rq_provider.h
 #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
@@ -68,8 +71,8 @@ class bundle_skiplist {
   RecManager* const recmgr;
   Random* const
       threadRNGs;  // threadRNGs[tid * PREFETCH_SIZE_WORDS] = rng for thread tid
-  RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>, RecManager, true,
-             false>* rqProvider;
+  RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>, RecManager,
+             true, false>* rqProvider;
 #ifdef USE_DEBUGCOUNTERS
   debugCounters* const counters;
 #endif
@@ -92,7 +95,7 @@ class bundle_skiplist {
   volatile char padding3[PREFETCH_SIZE_BYTES];
 
   bundle_skiplist(const int numProcesses, const K _KEY_MIN, const K _KEY_MAX,
-           const V NO_VALUE, Random* const threadRNGs);
+                  const V NO_VALUE, Random* const threadRNGs);
   ~bundle_skiplist();
 
   bool contains(const int tid, K key);
@@ -179,6 +182,47 @@ class bundle_skiplist {
 
  public:
   long long debugKeySum() { return debugKeySum(p_head); }
+
+  string getBundleStatsString() {
+    unsigned int max = -1;
+    long num_nodes = 0;
+    long total = 0;
+    stack<nodeptr> s;
+    unordered_set<node_t<K, V>*> unique;
+    nodeptr curr = p_head;
+    s.push(curr);
+    while (!s.empty()) {
+      // Try to add the current node to set of unique nodes.
+      curr = s.top();
+      s.pop();
+      auto result = unique.insert(curr);
+      if (result.second) {
+        // If this is an unseen node, update stats.
+        ++num_nodes;
+        int size = curr->rqbundle->getSize();
+        if (size > max) {
+          max = size;
+        }
+        total += size;
+
+        // Add all nodes in the bundle to the s, if we haven't seen this
+        // node before.
+        BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
+        while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
+          if (bundle_entry->ptr_ != nullptr) {
+            s.push((nodeptr)bundle_entry->ptr_);
+          }
+          bundle_entry = bundle_entry->next_;
+        }
+      }
+    }
+
+    stringstream ss;
+    ss << "total reachable nodes         : " << num_nodes << endl;
+    ss << "average bundle size           : " << (total / (double)num_nodes)
+       << endl;
+    return ss.str();
+  }
 };
 
 #endif  // SKIPLIST_H

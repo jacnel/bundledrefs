@@ -1,6 +1,9 @@
 #ifndef LAZYLIST_H
 #define LAZYLIST_H
 
+#include <unordered_set>
+#include <stack>
+
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
 // define BEFORE including rq_provider.h
 #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
@@ -109,6 +112,47 @@ class bundle_lazylist {
   }
 
   node_t<K, V>* debug_getEntryPoint() { return head; }
+
+  string getBundleStatsString() {
+    unsigned int max = -1;
+    long num_nodes = 0;
+    long total = 0;
+    stack<nodeptr> s;
+    unordered_set<nodeptr> unique;
+    nodeptr curr = head;
+    s.push(curr);
+    while (!s.empty()) {
+      // Try to add the current node to set of unique nodes.
+      curr = s.top();
+      s.pop();
+      auto result = unique.insert(curr);
+      if (result.second) {
+        // If this is an unseen node, update stats.
+        ++num_nodes;
+        int size = curr->rqbundle->getSize();
+        if (size > max) {
+          max = size;
+        }
+        total += size;
+
+        // Add all nodes in the bundle to s, if we haven't seen this
+        // node before.
+        BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
+        while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
+          if (bundle_entry->ptr_ != nullptr) {
+            s.push((nodeptr)bundle_entry->ptr_);
+          }
+          bundle_entry = bundle_entry->next_;
+        }
+      }
+    }
+
+    stringstream ss;
+    ss << "total reachable nodes         : " << num_nodes << endl;
+    ss << "average bundle size           : " << (total / (double)num_nodes)
+       << endl;
+    return ss.str();
+  }
 };
 
 #endif /* LAZYLIST_H */

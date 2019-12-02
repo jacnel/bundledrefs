@@ -22,8 +22,8 @@
  * Converted into a class and implemented as a 3-path algorithm by Trevor Brown
  */
 
-#ifndef CITRUS_IMPL_H
-#define CITRUS_IMPL_H
+#ifndef BUNDLE_CITRUS_IMPL_H
+#define BUNDLE_CITRUS_IMPL_H
 
 #include <assert.h>
 #include <pthread.h>
@@ -39,16 +39,15 @@ using namespace urcu;
 template <typename K, typename V, class RecManager>
 nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
                                                      V value) {
-  nodeptr nnode = recordmgr->template allocate<node_t<K, V> >(tid);
+  nodeptr nnode = recordmgr->template allocate<node_t<K, V>>(tid);
   if (nnode == NULL) {
     printf("out of memory\n");
     exit(1);
   }
-  rqProvider->init_node(tid, nnode);
   nnode->key = key;
   nnode->marked = false;
-  rqProvider->write_addr(tid, &nnode->child[0], (nodeptr)NULL);
-  rqProvider->write_addr(tid, &nnode->child[1], (nodeptr)NULL);
+  nnode->child[0] = (nodeptr)NULL;
+  nnode->child[1] = (nodeptr)NULL;
   nnode->tag[0] = 0;
   nnode->tag[1] = 0;
   nnode->value = value;
@@ -56,6 +55,8 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
   //        printf("\n mutex init failed\n");
   //    }
   nnode->lock = false;
+  nnode->rqbundle[0] = new Bundle<node_t<K, V>>();
+  nnode->rqbundle[1] = new Bundle<node_t<K, V>>();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -90,17 +91,18 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
   // waiting for their itimes to be set to a positive number.
   nodeptr _rootchild = newNode(tid, NO_KEY, NO_VALUE);
   nodeptr _root = newNode(tid, NO_KEY, NO_VALUE);
-  rqProvider->write_addr(tid, &_root->child[0], _rootchild);
-  nodeptr insertedNodes[] = {_root, _rootchild, NULL};
-  nodeptr deletedNodes[] = {NULL};
+  _root->child[0] = _rootchild;
+  // nodeptr insertedNodes[] = {_root, _rootchild, NULL};
+  // nodeptr deletedNodes[] = {NULL};
   root = NULL;  // to prevent reading from uninitialized root pointer in the
-                // following call (which, depending on the rq provider, may read
-                // root, e.g., to perform a cas)
-  rqProvider->linearize_update_at_write(tid, &root, _root, insertedNodes,
-                                        deletedNodes);
+  // following call (which, depending on the rq provider, may read
+  // root, e.g., to perform a cas)
+  Bundle<node_t<K, V>>* bundles[] = {_root->rqbundle[0], nullptr};
+  nodeptr ptrs[] = {_rootchild, nullptr};
+  rqProvider->linearize_update_at_write(tid, &root, _root, bundles, ptrs);
 #else
   root = newNode(tid, NO_KEY, NO_VALUE);
-  rqProvider->write_addr(tid, &root->child[0], newNode(tid, NO_KEY, NO_VALUE));
+  root->child[0] = newNode(tid, NO_KEY, NO_VALUE);
 #endif
 }
 
@@ -122,11 +124,11 @@ const pair<V, bool> bundle_citrustree<K, V, RecManager>::find(const int tid,
                                                               const K& key) {
   recordmgr->leaveQuiescentState(tid, true);
   readLock();
-  nodeptr curr = rqProvider->read_addr(tid, &root->child[0]);
+  nodeptr curr = root->child[0];
   K ckey = curr->key;
   while (curr != NULL && ckey != key) {
-    if (ckey > key) curr = rqProvider->read_addr(tid, &curr->child[0]);
-    if (ckey < key) curr = rqProvider->read_addr(tid, &curr->child[1]);
+    if (ckey > key) curr = curr->child[0];
+    if (ckey < key) curr = curr->child[1];
     if (curr != NULL) ckey = curr->key;
   }
   readUnlock();
@@ -150,31 +152,29 @@ bool bundle_citrustree<K, V, RecManager>::validate(const int tid, nodeptr prev,
                                                    int tag, nodeptr curr,
                                                    int direction) {
   if (curr == NULL) {
-    return (!prev->marked &&
-            (rqProvider->read_addr(tid, &prev->child[direction]) == curr) &&
+    return (!prev->marked && (prev->child[direction] == curr) &&
             (prev->tag[direction] == tag));
   } else {
-    return (!prev->marked && !curr->marked &&
-            rqProvider->read_addr(tid, &prev->child[direction]) == curr);
+    return (!prev->marked && !curr->marked && prev->child[direction] == curr);
   }
 }
 
-#define SEARCH                                            \
-  prev = root;                                            \
-  curr = rqProvider->read_addr(tid, &root->child[0]);     \
-  direction = 0;                                          \
-  ckey = curr->key;                                       \
-  while (curr != NULL && ckey != key) {                   \
-    prev = curr;                                          \
-    if (ckey > key) {                                     \
-      curr = rqProvider->read_addr(tid, &curr->child[0]); \
-      direction = 0;                                      \
-    }                                                     \
-    if (ckey < key) {                                     \
-      curr = rqProvider->read_addr(tid, &curr->child[1]); \
-      direction = 1;                                      \
-    }                                                     \
-    if (curr != NULL) ckey = curr->key;                   \
+#define SEARCH                          \
+  prev = root;                          \
+  curr = root->child[0];                \
+  direction = 0;                        \
+  ckey = curr->key;                     \
+  while (curr != NULL && ckey != key) { \
+    prev = curr;                        \
+    if (ckey > key) {                   \
+      curr = curr->child[0];            \
+      direction = 0;                    \
+    }                                   \
+    if (ckey < key) {                   \
+      curr = curr->child[1];            \
+      direction = 1;                    \
+    }                                   \
+    if (curr != NULL) ckey = curr->key; \
   }
 
 template <typename K, typename V, class RecManager>
@@ -201,7 +201,9 @@ retry:
       assert(result != NO_VALUE);
       return result;
     } else {
-      assert(false);
+      std::cerr << "In place updates are not supported at this time..."
+                << std::endl;
+      exit(1);
       // acquireLock(&(prev->lock));
       // if (validate(tid, prev, tag, curr, direction)) {
       //     acquireLock(&(curr->lock));
@@ -239,9 +241,10 @@ retry:
     // nodeptr insertedNodes[] = {nnode, NULL};
     // nodeptr deletedNodes[] = {NULL};
 
-    Bundle<node_t<K,V>> *bundles[] = {prev->rqbundle}
+    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
+    nodeptr ptrs[] = {nnode, nullptr};
     rqProvider->linearize_update_at_write(tid, &prev->child[direction], nnode,
-                                          insertedNodes, deletedNodes);
+                                          bundles, ptrs);
 
     releaseLock(&(prev->lock));
     recordmgr->enterQuiescentState(tid);
@@ -298,17 +301,19 @@ retry:
     recordmgr->enterQuiescentState(tid);
     goto retry;
   }
-  if (rqProvider->read_addr(tid, &curr->child[0]) == NULL) {
+  if (curr->child[0] == NULL) {
     curr->marked = true;
 
-    nodeptr insertedNodes[] = {NULL};
-    nodeptr deletedNodes[] = {curr, NULL};
-    rqProvider->linearize_update_at_write(
-        tid, &prev->child[direction],
-        rqProvider->read_addr(tid, &curr->child[1]), insertedNodes,
-        deletedNodes);
+    // nodeptr insertedNodes[] = {NULL};
+    // nodeptr deletedNodes[] = {curr, NULL};
 
-    if (rqProvider->read_addr(tid, &prev->child[direction]) == NULL) {
+    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
+    nodeptr ptrs[] = {curr->child[1], nullptr};
+
+    rqProvider->linearize_update_at_write(
+        tid, &prev->child[direction], (nodeptr)curr->child[1], bundles, ptrs);
+
+    if (prev->child[direction] == NULL) {
       prev->tag[direction]++;
     }
 
@@ -319,17 +324,18 @@ retry:
     recordmgr->enterQuiescentState(tid);
     return pair<V, bool>(result, true);
   }
-  if (rqProvider->read_addr(tid, &curr->child[1]) == NULL) {
+  if (curr->child[1] == NULL) {
     curr->marked = true;
 
-    nodeptr insertedNodes[] = {NULL};
-    nodeptr deletedNodes[] = {curr, NULL};
-    rqProvider->linearize_update_at_write(
-        tid, &prev->child[direction],
-        rqProvider->read_addr(tid, &curr->child[0]), insertedNodes,
-        deletedNodes);
+    // nodeptr insertedNodes[] = {NULL};
+    // nodeptr deletedNodes[] = {curr, NULL};
 
-    if (rqProvider->read_addr(tid, &prev->child[direction]) == NULL) {
+    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
+    nodeptr ptrs[] = {curr->child[0], nullptr};
+    rqProvider->linearize_update_at_write(
+        tid, &prev->child[direction], (nodeptr)curr->child[0], bundles, ptrs);
+
+    if (prev->child[direction] == NULL) {
       prev->tag[direction]++;
     }
 
@@ -341,12 +347,12 @@ retry:
     return pair<K, bool>(result, true);
   }
   prevSucc = curr;
-  succ = rqProvider->read_addr(tid, &curr->child[1]);
-  next = rqProvider->read_addr(tid, &succ->child[0]);
+  succ = curr->child[1];
+  next = succ->child[0];
   while (next != NULL) {
     prevSucc = succ;
     succ = next;
-    next = rqProvider->read_addr(tid, &next->child[0]);
+    next = next->child[0];
   }
   int succDirection = 1;
   if (prevSucc != curr) {
@@ -358,29 +364,32 @@ retry:
       validate(tid, succ, succ->tag[0], NULL, 0)) {
     curr->marked = true;
     nnode = newNode(tid, succ->key, succ->value);
-    rqProvider->write_addr(tid, &nnode->child[0],
-                           rqProvider->read_addr(tid, &curr->child[0]));
-    rqProvider->write_addr(tid, &nnode->child[1],
-                           rqProvider->read_addr(tid, &curr->child[1]));
+    nnode->child[0] = curr->child[0];
+    nnode->child[1] = curr->child[1];
     acquireLock(&(nnode->lock));
 
-    nodeptr insertedNodes[] = {nnode, NULL};
-    nodeptr deletedNodes[] = {curr, succ, NULL};
+    // nodeptr insertedNodes[] = {nnode, NULL};
+    // nodeptr deletedNodes[] = {curr, succ, NULL};
+    Bundle<node_t<K, V>>* bundles[] = {
+        prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1],
+        (prevSucc != curr ? prevSucc->rqbundle[0] : nullptr), nullptr};
+    nodeptr ptrs[] = {nnode, curr->child[0],
+                      (prevSucc != curr ? curr->child[1] : succ->child[1]),
+                      (prevSucc != curr ? succ->child[1] : nullptr), nullptr};
     rqProvider->linearize_update_at_write(tid, &prev->child[direction], nnode,
-                                          insertedNodes, deletedNodes);
+                                          bundles, ptrs);
 
     synchronize();
 
     succ->marked = true;
     if (prevSucc == curr) {
-      rqProvider->write_addr(tid, &nnode->child[1],
-                             rqProvider->read_addr(tid, &succ->child[1]));
-      if (rqProvider->read_addr(tid, &nnode->child[1]) == NULL) {
+      nnode->child[1] = succ->child[1];
+      if (nnode->child[1] == NULL) {
         nnode->tag[1]++;
       }
     } else {
-      rqProvider->write_addr(tid, &prevSucc->child[0], succ->child[1]);
-      if (rqProvider->read_addr(tid, &prevSucc->child[0]) == NULL) {
+      prevSucc->child[0] = succ->child[1];
+      if (prevSucc->child[0] == NULL) {
         prevSucc->tag[0]++;
       }
     }
@@ -408,36 +417,79 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                     const K& hi,
                                                     K* const resultKeys,
                                                     V* const resultValues) {
-  block<node_t<K, V> > stack(NULL);
   recordmgr->leaveQuiescentState(tid, true);
-  rqProvider->traversal_start(tid);
 
-  // depth first traversal (of interesting subtrees)
-  int size = 0;
-  stack.push(root);
+  // Traverse tree until the root of the subtree defining the range is found.
+  nodeptr curr = root->child[0];
+  // nodeptr pred = nullptr;
+  // int direction = -1;
+  // timestamp_t ts;
+  // while (curr != nullptr) {
+  //   if (curr->key >= lo && curr->key <= hi) {
+  //     // Found the subtree that contains the range. Note that a concurrent
+  //     // update may have deleted curr, so we cannot guarantee that curr is in
+  //     // the range. We can however guarantee that the range is rooted at
+  //     curr. ts = rqProvider->start_traversal(tid); assert(direction != -1);
+  //     curr = pred->rqbundle[direction]->getPtrByTimestamp(ts);
+  //     break;
+  //   } else if (curr->key < lo) {
+  //     // Search right subtree.
+  //     pred = curr;
+  //     curr = curr->child[1];
+  //     direction = 1;
+  //   } else {
+  //     // Search left subtree.
+  //     pred = curr;
+  //     curr = curr->child[0];
+  //     direction = 0;
+  //   }
+  // }
+
+  timestamp_t ts = rqProvider->start_traversal(tid);
+  while (curr != nullptr) {
+    if (curr->key >= lo && curr->key <= hi) {
+      break;
+    } else if (curr->key < lo) {
+      // Search right subtree.
+      curr = curr->rqbundle[1]->getPtrByTimestamp(ts);
+    } else {
+      // Search left subtree.
+      curr = curr->rqbundle[0]->getPtrByTimestamp(ts);
+    }
+  }
+
+  // No keys exist in the range.
+  if (curr == nullptr) {
+    return 0;
+  }
+
+  block<node_t<K, V>> stack(nullptr);
+  int cnt = 0;
+  stack.push(curr);
   while (!stack.isEmpty()) {
     nodeptr node = stack.pop();
 
     // what (if anything) we need to do with CITRUS' validation function?
     // answer: nothing, because searches don't need to do anything with it.
 
-    // check if we should add node's key to the traversal
-    rqProvider->traversal_try_add(tid, node, resultKeys, resultValues, &size,
-                                  lo, hi);
+    // If the key is in the range, at it to the result set.
+    if (node->key >= lo && node->key <= hi) {
+      cnt += getKeys(tid, node, resultKeys + cnt, resultValues + cnt);
+    }
 
-    // if internal node, explore its children
-    nodeptr left = rqProvider->read_addr(tid, &node->child[0]);
-    nodeptr right = rqProvider->read_addr(tid, &node->child[1]);
-    if (left != NULL && lo < node->key) {
+    // Explore subtrees based on timestamp and range.
+    nodeptr left = node->rqbundle[0]->getPtrByTimestamp(ts);
+    nodeptr right = node->rqbundle[1]->getPtrByTimestamp(ts);
+    if (left != nullptr && lo < node->key) {
       stack.push(left);
     }
-    if (right != NULL && hi > node->key) {
+    if (right != nullptr && hi > node->key) {
       stack.push(right);
     }
   }
-  rqProvider->traversal_end(tid, resultKeys, resultValues, &size, lo, hi);
+  rqProvider->end_traversal(tid);
   recordmgr->enterQuiescentState(tid);
-  return size;
+  return cnt;
 }
 
 template <typename K, typename V, class RecManager>

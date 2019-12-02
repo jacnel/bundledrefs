@@ -21,7 +21,6 @@
 #define CAS __sync_val_compare_and_swap
 #define likely
 #define unlikely
-#define CPU_RELAX
 
 template <typename K, typename V>
 static void sl_node_lock(nodeptr p_node) {
@@ -74,9 +73,9 @@ void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
   p_node->val = value;
   p_node->topLevel = height;
   p_node->lock = 0;
-  rqProvider->write_addr(tid, &p_node->marked, (long long)0);
-  rqProvider->write_addr(tid, &p_node->fullyLinked, (long long)0);
-  p_node->rqbundle = new Bundle<node_t<K,V>>();
+  p_node->marked = (long long)0;
+  p_node->fullyLinked = (long long)0;
+  p_node->rqbundle = new Bundle<node_t<K, V>>();
 }
 
 template <typename K, typename V, class RecordMgr>
@@ -208,9 +207,8 @@ bool bundle_skiplist<K, V, RecManager>::contains(const int tid, K key) {
   bool res;
   recmgr->leaveQuiescentState(tid, true);
   lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
-  res = (lFound != -1) &&
-        rqProvider->read_addr(tid, &p_succs[lFound]->fullyLinked) &&
-        !rqProvider->read_addr(tid, &p_succs[lFound]->marked);
+  res = (lFound != -1) && p_succs[lFound]->fullyLinked &&
+        !p_succs[lFound]->marked;
 #ifdef RQ_SNAPCOLLECTOR
   if (lFound != -1) rqProvider->search_report_target_key(tid, key, p_found);
 #endif
@@ -233,8 +231,8 @@ const pair<V, bool> bundle_skiplist<K, V, RecManager>::find(const int tid,
   recmgr->leaveQuiescentState(tid, true);
   lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
   res = (lFound != -1) &&
-        rqProvider->read_addr(tid, &p_succs[lFound]->fullyLinked) &&
-        !rqProvider->read_addr(tid, &p_succs[lFound]->marked);
+        p_succs[lFound]->fullyLinked &&
+        !p_succs[lFound]->marked;
 #ifdef RQ_SNAPCOLLECTOR
   if (lFound != -1) rqProvider->search_report_target_key(tid, key, p_found);
 #endif
@@ -272,8 +270,8 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
     lFound = find_impl(tid, key, p_preds, p_succs, NULL);
     if (lFound != -1) {
       p_node_found = p_succs[lFound];
-      if (!rqProvider->read_addr(tid, &p_node_found->marked)) {
-        while (!rqProvider->read_addr(tid, &p_node_found->fullyLinked)) {
+      if (!p_node_found->marked) {
+        while (!p_node_found->fullyLinked) {
           CPU_RELAX;
         }  // keep spinning
         recmgr->enterQuiescentState(tid);
@@ -307,9 +305,8 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       }
       highestLocked = level;
       // make sure nothing has changed in between
-      valid = !rqProvider->read_addr(tid, &p_pred->marked) &&
-              !rqProvider->read_addr(tid, &p_succ->marked) &&
-              p_pred->p_next[level] == p_succ;
+      valid =
+          !p_pred->marked && !p_succ->marked && p_pred->p_next[level] == p_succ;
     }
 
     if (valid) {
@@ -382,20 +379,17 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
     }
     p_victim = p_succs[lFound];
 
-    if ((!isMarked) || (rqProvider->read_addr(tid, &p_victim->fullyLinked) &&
-                        p_victim->topLevel == lFound &&
-                        !rqProvider->read_addr(tid, &p_victim->marked))) {
+    if ((!isMarked) || (p_victim->fullyLinked && p_victim->topLevel == lFound &&
+                        !p_victim->marked)) {
       if (!isMarked) {
         topLevel = p_victim->topLevel;
         sl_node_lock(p_victim);
-        if (rqProvider->read_addr(tid, &p_victim->marked)) {
+        if (p_victim->marked) {
           sl_node_unlock(p_victim);
           // ret = 0; ret is already NO_VALUE = fail
           recmgr->enterQuiescentState(tid);
           break;
         }
-        // rqProvider->write_addr(tid, &p_victim->marked, 1);
-        // isMarked = 1;
       }
 
       highestLocked = -1;
@@ -408,8 +402,7 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
           sl_node_lock(p_pred);
         }
         highestLocked = level;
-        valid = !rqProvider->read_addr(tid, &p_pred->marked) &&
-                p_pred->p_next[level] == p_victim;
+        valid = !p_pred->marked && p_pred->p_next[level] == p_victim;
       }
 
       if (valid) {
@@ -417,9 +410,6 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
         rqProvider->linearize_update_at_write(tid, &p_victim->marked,
                                               (long long)1, bundles, ptrs);
-        // p_victim->marked = 1;
-
-        rqProvider->announce_physical_deletion(tid, {nullptr});
         for (level = topLevel; level >= 0; level--) {
           p_preds[level]->p_next[level] = p_victim->p_next[level];
         }
@@ -428,8 +418,6 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         ret = p_victim->val;
         sl_node_unlock(p_victim);
       } else {
-        // rqProvider->write_addr(tid, &p_victim->marked, 0);
-        // isMarked = 0;
         sl_node_unlock(p_victim);
       }
 
@@ -468,7 +456,7 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     nodeptr curr = nullptr;
     for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];
-      while (curr->key < KEY_PRECEEDING(lo)) {
+      while (curr->key < lo) {
         pred = curr;
         curr = pred->p_next[level];
       }
@@ -476,7 +464,9 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     // Perform the traversal using the bundles.
     curr = pred->rqbundle->getPtrByTimestamp(ts);
     while (curr != nullptr && curr->key <= hi) {
-      cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+      if (curr->key >= lo) {
+        cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+      }
       curr = curr->rqbundle->getPtrByTimestamp(ts);
     }
     rqProvider->end_traversal(tid);
