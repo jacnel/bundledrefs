@@ -5,3 +5,6 @@ microbench/graphs*
 microbench/*.out
 microbench/warnings.txt
 microbench/experiment_list.txt*
+microbench/plot_config.py
+macrobench/bin/*
+macrobench/data*

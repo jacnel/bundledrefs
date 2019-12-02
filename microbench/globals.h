@@ -85,6 +85,14 @@ int TOTAL_THREADS;
           C stat_output_item(PRINT_RAW, AVERAGE, TOTAL) \
           C stat_output_item(PRINT_RAW, STDEV, TOTAL) \
     }) \
+    handle_stat(LONG_LONG, length_rqs, 10000, { \
+            stat_output_item(PRINT_HISTOGRAM_LOG, NONE, FULL_DATA) \
+          C stat_output_item(PRINT_RAW, SUM, TOTAL) \
+          C stat_output_item(PRINT_RAW, AVERAGE, TOTAL) \
+          C stat_output_item(PRINT_RAW, STDEV, TOTAL) \
+          C stat_output_item(PRINT_RAW, MIN, TOTAL) \
+          C stat_output_item(PRINT_RAW, MAX, TOTAL) \
+    }) \
     handle_stat(LONG_LONG, latency_rqs, 10000, { \
             stat_output_item(PRINT_HISTOGRAM_LOG, NONE, FULL_DATA) \
           /*C stat_output_item(PRINT_RAW, NONE, FULL_DATA)*/ \

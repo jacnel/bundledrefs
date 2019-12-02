@@ -148,6 +148,7 @@ void *thread_prefill(void *_id) {
 
     VERBOSE if (cnt && ((cnt % 1000000) == 0))
         COUTATOMICTID("op# " << cnt << endl);
+    // TODO: Generate keys using a zipfian distribution.
     int key = rng->nextNatural(MAXKEY);
     double op = rng->nextNatural(100000000) / 1000000.;
     GSTATS_TIMER_RESET(tid, timer_latency);
@@ -452,6 +453,7 @@ void *thread_timed(void *_id) {
       }
       GSTATS_TIMER_APPEND_ELAPSED(tid, timer_latency, latency_rqs);
       GSTATS_ADD(tid, num_rq, 1);
+      GSTATS_ADD_IX(tid, length_rqs, rqcnt, GSTATS_GET(tid, num_rq));
     } else {
       GSTATS_TIMER_RESET(tid, timer_latency);
       if (FIND_AND_CHECK_SUCCESS) {
@@ -536,6 +538,7 @@ void *thread_rq(void *_id) {
     }
     GSTATS_TIMER_APPEND_ELAPSED(tid, timer_latency, latency_rqs);
     GSTATS_ADD(tid, num_rq, 1);
+    GSTATS_ADD_IX(tid, length_rqs, rqcnt, GSTATS_GET(tid, num_rq));
     GSTATS_ADD(tid, num_operations, 1);
   }
   glob.running.fetch_add(-1);
@@ -593,7 +596,8 @@ void trial() {
   tsNap.tv_sec = 0;
   tsNap.tv_nsec = 10000000;  // 10ms
 
-  // start all threads. All worker threads are scheduled first, then range query threads.
+  // start all threads. All worker threads are scheduled first, then range query
+  // threads.
   for (int i = 0; i < TOTAL_THREADS; ++i) {
     if (pthread_create(threads[i], NULL,
                        (i < WORK_THREADS ? thread_timed : thread_rq),
@@ -849,6 +853,11 @@ void printOutput() {
                                                 << endl);
   COUTATOMIC("data structure size           : " << ds->getSizeString() << endl);
   COUTATOMIC(endl);
+
+#ifdef RQ_BUNDLE
+  COUTATOMIC(ds->getBundleStatsString());
+  COUTATOMIC(endl);
+#endif
 
 #if defined(USE_DEBUGCOUNTERS) || defined(USE_GSTATS)
   cout << "begin papi_print_counters..." << endl;

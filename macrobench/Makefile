@@ -28,7 +28,7 @@ INCLUDE = -I. -I./include -I./benchmarks -I./concurrency_control -I./storage -I.
 ######################## DEFINES FOR RQ_DATA STRUCTURES ########################
 #CFLAGS += -Winline
 CFLAGS += -DNDEBUG
-#CFLAGS += -DNO_FREE
+CFLAGS += -DNO_FREE
 #CFLAGS += -DUSE_STL_HASHLIST
 CFLAGS += -DUSE_SIMPLIFIED_HASHLIST
 #CFLAGS += -DRAPID_RECLAMATION

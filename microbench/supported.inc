@@ -17,7 +17,7 @@ check_ds_technique() {
     ## args: ds alg
     if [ "$2" == "snapcollector" ] && [ "$1" != "lflist" ] && [ "$1" != "skiplistlock" ] ; then return 1 ; fi
     if [ "$2" == "rlu" ] && [ "$1" != "lazylist" ] && [ "$1" != "citrus" ] ; then return 1 ; fi
-    if [ "$2" == "bundle" ] && [ "$1" != "lazylist" ] && [ "$1" != "skiplistlock" ] ; then return 1 ; fi
+    if [ "$2" == "bundle" ] && [ "$1" != "lazylist" ] && [ "$1" != "skiplistlock" ] && [ "$1" != "citrus" ] ; then return 1 ; fi
     return 0
 }
 export -f check_ds_technique
