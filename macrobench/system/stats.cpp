@@ -39,10 +39,14 @@ void Stats_thd::clear() {
 void Stats_tmp_index::clear() {
     timeContains = 0;
     timeInsert = 0;
+    timeRemove = 0;
     timeRangeQuery = 0;
     numContains = 0;
     numInsert = 0;
+    numRemove = 0;
     numRangeQuery = 0;
+    lenRangeQuery = 0;
+    numLenRangeQuery = 0;
 }
 
 void Stats_tmp::init() {
@@ -113,10 +117,14 @@ void Stats::commit(uint64_t thd_id) {
 #               define COMMIT_ACCUMULATE(name) for (int i=0;i<MAX_NUM_INDEXES;++i) _stats[thd_id]->stats_indexes[i].name += tmp_stats[thd_id]->stats_indexes[i].name
                 COMMIT_ACCUMULATE(timeContains);
                 COMMIT_ACCUMULATE(timeInsert);
+                COMMIT_ACCUMULATE(timeRemove);
                 COMMIT_ACCUMULATE(timeRangeQuery);
                 COMMIT_ACCUMULATE(numContains);
                 COMMIT_ACCUMULATE(numInsert);
+                COMMIT_ACCUMULATE(numRemove);
                 COMMIT_ACCUMULATE(numRangeQuery);
+                COMMIT_ACCUMULATE(lenRangeQuery);
+                COMMIT_ACCUMULATE(numLenRangeQuery);
 		tmp_stats[thd_id]->init();
 	}
 }
@@ -217,18 +225,24 @@ void Stats::print(workload * wl) {
                 LOAD_STAT(index, tid, timeContains);
                 LOAD_STAT(index, tid, numInsert);
                 LOAD_STAT(index, tid, timeInsert);
+                LOAD_STAT(index, tid, numRemove);
+                LOAD_STAT(index, tid, timeRemove);
                 LOAD_STAT(index, tid, numRangeQuery);
                 LOAD_STAT(index, tid, timeRangeQuery);
+                LOAD_STAT(index, tid, lenRangeQuery);
+                LOAD_STAT(index, tid, numLenRangeQuery);
                 timeContains /= BILLION;
                 timeInsert /= BILLION;
+                timeRemove /= BILLION;
                 timeRangeQuery /= BILLION;
-                uint64_t ixTotalOps = numContains + numInsert + numRangeQuery;
-                double ixTotalTime = timeContains + timeInsert + timeRangeQuery;
+                uint64_t ixTotalOps = numContains + numInsert + numRemove + numRangeQuery;
+                double ixTotalTime = timeContains + timeInsert + timeRemove + timeRangeQuery;
                 double ixThroughput = ixTotalOps / (ixTotalTime / g_thread_cnt);
                 printf("Per-thread per-index stats: index=%s, thread=%d"
                         ", numContains=%ld, timeContains=%f"
                         ", numInsert=%ld, timeInsert=%f"
-                        ", numRangeQuery=%ld, timeRangeQuery=%f"
+                        ", numRemove=%ld, timeRemove=%f"
+                        ", numRangeQuery=%ld, timeRangeQuery=%f, lenRangeQuery=%f"
                         ", totalOperations=%ld, totalTime=%f, throughput=%f\n"
                         , index->index_name.c_str()
                         , tid
@@ -236,8 +250,11 @@ void Stats::print(workload * wl) {
                         , timeContains
                         , numInsert
                         , timeInsert
+                        , numRemove
+                        , timeRemove
                         , numRangeQuery
                         , timeRangeQuery
+                        , lenRangeQuery / (double) numLenRangeQuery
                         , ixTotalOps
                         , ixTotalTime
                         , ixThroughput
@@ -255,35 +272,48 @@ void Stats::print(workload * wl) {
             double timeContains = 0;
             uint64_t numInsert = 0;
             double timeInsert = 0;
+            uint64_t numRemove = 0;
+            double timeRemove = 0;
             uint64_t numRangeQuery = 0;
             double timeRangeQuery = 0;
+            uint64_t lenRangeQuery = 0;
+            uint64_t numLenRangeQuery = 0;
             for (int tid=0;tid<g_thread_cnt;++tid) {
                 ACCUM_STAT(index, tid, numContains);
                 ACCUM_STAT(index, tid, timeContains);
                 ACCUM_STAT(index, tid, numInsert);
                 ACCUM_STAT(index, tid, timeInsert);
+                ACCUM_STAT(index, tid, numRemove);
+                ACCUM_STAT(index, tid, timeRemove);
                 ACCUM_STAT(index, tid, numRangeQuery);
                 ACCUM_STAT(index, tid, timeRangeQuery);
+                ACCUM_STAT(index, tid, lenRangeQuery);
+                ACCUM_STAT(index, tid, numLenRangeQuery);
             }
             timeContains /= BILLION;
             timeInsert /= BILLION;
+            timeRemove /= BILLION;
             timeRangeQuery /= BILLION;
 
-            uint64_t ixTotalOps = numContains + numInsert + numRangeQuery;
-            double ixTotalTime = timeContains + timeInsert + timeRangeQuery;
+            uint64_t ixTotalOps = numContains + numInsert + numRemove + numRangeQuery;
+            double ixTotalTime = timeContains + timeInsert + timeRemove + timeRangeQuery;
             double ixThroughput = ixTotalOps / (ixTotalTime / g_thread_cnt);
             printf("Per-index stats: index=%s"
                     ", numContains=%ld, timeContains=%f"
                     ", numInsert=%ld, timeInsert=%f"
-                    ", numRangeQuery=%ld, timeRangeQuery=%f"
+                    ", numRemove=%ld, timeRemove=%f"
+                    ", numRangeQuery=%ld, timeRangeQuery=%f, lenRangeQuery=%f"
                     ", totalOps=%ld, totalTime=%f, throughput=%f\n"
                     , index->index_name.c_str()
                     , numContains
                     , timeContains
                     , numInsert
                     , timeInsert
+                    , numRemove
+                    , timeRemove
                     , numRangeQuery
                     , timeRangeQuery
+                    , lenRangeQuery / (double) numLenRangeQuery
                     , ixTotalOps
                     , ixTotalTime
                     , ixThroughput
@@ -297,8 +327,12 @@ void Stats::print(workload * wl) {
         double timeContains = 0;
         uint64_t numInsert = 0;
         double timeInsert = 0;
+        uint64_t numRemove = 0;
+        double timeRemove = 0;
         uint64_t numRangeQuery = 0;
         double timeRangeQuery = 0;
+        uint64_t lenRangeQuery = 0;
+        uint64_t numLenRangeQuery = 0;
         for (auto it = wl->indexes.begin(); it != wl->indexes.end(); it++) {
             INDEX * index = it->second;
             for (int tid=0;tid<g_thread_cnt;++tid) {
@@ -306,26 +340,36 @@ void Stats::print(workload * wl) {
                 ACCUM_STAT(index, tid, timeContains);
                 ACCUM_STAT(index, tid, numInsert);
                 ACCUM_STAT(index, tid, timeInsert);
+                ACCUM_STAT(index, tid, numRemove);
+                ACCUM_STAT(index, tid, timeRemove);
                 ACCUM_STAT(index, tid, numRangeQuery);
                 ACCUM_STAT(index, tid, timeRangeQuery);
+                ACCUM_STAT(index, tid, lenRangeQuery);
+                ACCUM_STAT(index, tid, numLenRangeQuery);
             }
         }
         timeContains /= BILLION;
         timeInsert /= BILLION;
+        timeRemove /= BILLION;
         timeRangeQuery /= BILLION;
-        uint64_t ixTotalOps = numContains + numInsert + numRangeQuery;
-        double ixTotalTime = timeContains + timeInsert + timeRangeQuery;
+        uint64_t ixTotalOps = numContains + numInsert + numRemove + numRangeQuery;
+        double ixTotalTime = timeContains + timeInsert + timeRemove + timeRangeQuery;
         double ixThroughput = ixTotalOps / (ixTotalTime / g_thread_cnt);
         printf("Aggregate index stats: "
-                "numContains=%ld, timeContains=%f, numInsert=%ld, timeInsert=%f"
-                ", numRangeQuery=%ld, timeRangeQuery=%f"
+                "numContains=%ld, timeContains=%f"
+                ", numInsert=%ld, timeInsert=%f"
+                ", numRemove=%ld, timeRemove=%f"
+                ", numRangeQuery=%ld, timeRangeQuery=%f, lenRangeQuery=%f"
                 ", totalOps=%ld, totalTime=%f, throughput=%f\n"
                 , numContains
                 , timeContains
                 , numInsert
                 , timeInsert
+                , numRemove
+                , timeRemove
                 , numRangeQuery
                 , timeRangeQuery
+                , lenRangeQuery / (double) numLenRangeQuery
                 , ixTotalOps
                 , ixTotalTime
                 , ixThroughput
@@ -340,7 +384,8 @@ void Stats::print(workload * wl) {
 		", deadlock_cnt=%ld, cycle_detect=%ld, dl_detect_time=%f, dl_wait_time=%f"
 		", time_query=%f, debug1=%f, debug2=%f, debug3=%f, debug4=%f, debug5=%f"
                 ", ixNumContains=%ld, ixTimeContains=%f, ixNumInsert=%ld, ixTimeInsert=%f"
-                ", ixNumRangeQuery=%ld, ixTimeRangeQuery=%f"
+                ", ixNumRemove=%ld, ixTimeRemove=%f"
+                ", ixNumRangeQuery=%ld, ixTimeRangeQuery=%f, ixLenRangeQuery=%f"
                 ", ixTotalOps=%ld, ixTotalTime=%f, ixThroughput=%f"
                 ", nthreads=%d, throughput=%f"
                 ", node_size=%zd, descriptor_size=%zd"
@@ -369,8 +414,11 @@ void Stats::print(workload * wl) {
                 timeContains,
                 numInsert,
                 timeInsert,
+                numRemove,
+                timeRemove,
                 numRangeQuery,
                 timeRangeQuery,
+                lenRangeQuery / (double) numLenRangeQuery,
                 ixTotalOps,
                 ixTotalTime,
                 ixThroughput,

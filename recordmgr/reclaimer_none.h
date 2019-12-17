@@ -60,7 +60,7 @@ public:
     // returns true if the call rotated the epoch bags for thread tid
     // (and reclaimed any objects retired two epochs ago).
     // otherwise, the call returns false.
-    inline static bool leaveQuiescentState(const int tid, void * const * const reclaimers, const int numReclaimers) {
+    inline static bool leaveQuiescentState(const int tid, void * const * const reclaimers, const int numReclaimers, bool readOnly = false) {
         return false;
     }
     inline static void enterQuiescentState(const int tid) {

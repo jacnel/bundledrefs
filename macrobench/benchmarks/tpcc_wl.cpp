@@ -197,7 +197,7 @@ void tpcc_wl::init_tab_dist(uint64_t wid) {
         double w_ytd = 30000.00;
         row->set_value(D_TAX, tax);
         row->set_value(D_YTD, w_ytd);
-        row->set_value(D_NEXT_O_ID, 3001);
+        row->set_value(D_NEXT_O_ID, (int64_t)3001);
 
         index_insert(i_district, distKey(did, wid), row, wh_to_part(wid));
     }
@@ -364,7 +364,7 @@ void tpcc_wl::init_tab_order(uint64_t did, uint64_t wid) {
     for (unsigned i = 0; i<g_cust_per_dist; ++i) perm_oid[i] = i+1;
 #endif
     for (UInt32 i = 0; i<g_cust_per_dist; i++) {
-        UInt32 oid = (UInt32) perm_oid[i];
+        int64_t oid = (int64_t) perm_oid[i];
         row_t * row;
         uint64_t row_id;
         t_order->get_new_row(row, 0, row_id);
@@ -417,7 +417,7 @@ void tpcc_wl::init_tab_order(uint64_t did, uint64_t wid) {
             row->set_value(NO_O_ID, oid);
             row->set_value(NO_D_ID, did);
             row->set_value(NO_W_ID, wid);
-            index_insert(i_neworder, neworderKey(wid, did, oid), row, wh_to_part(wid));
+            index_insert(i_neworder, neworderKey(wid, did, (int64_t)oid), row, wh_to_part(wid));
         }
     }
 }

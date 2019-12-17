@@ -1,6 +1,9 @@
 #ifndef SKIPLIST_H
 #define SKIPLIST_H
 
+#include <stack>
+#include <unordered_set>
+
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
 // define BEFORE including rq_provider.h
 #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
@@ -44,8 +47,14 @@ class node_t {
     volatile long long itime;
     volatile long long dtime;
     node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
-    rq_bundle_t<node_t>* volatile rqbundle;
+    Bundle<node_t>* volatile rqbundle;
   };
+
+  ~node_t() { delete rqbundle; }
+
+  bool validate() {
+    return p_next[0] == rqbundle->getHead()->ptr_;
+  }
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
@@ -68,8 +77,8 @@ class bundle_skiplist {
   RecManager* const recmgr;
   Random* const
       threadRNGs;  // threadRNGs[tid * PREFETCH_SIZE_WORDS] = rng for thread tid
-  RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>, RecManager, true,
-             false>* rqProvider;
+  RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>, RecManager,
+             true, false>* rqProvider;
 #ifdef USE_DEBUGCOUNTERS
   debugCounters* const counters;
 #endif
@@ -92,7 +101,7 @@ class bundle_skiplist {
   volatile char padding3[PREFETCH_SIZE_BYTES];
 
   bundle_skiplist(const int numProcesses, const K _KEY_MIN, const K _KEY_MAX,
-           const V NO_VALUE, Random* const threadRNGs);
+                  const V NO_VALUE, Random* const threadRNGs);
   ~bundle_skiplist();
 
   bool contains(const int tid, K key);
@@ -107,8 +116,10 @@ class bundle_skiplist {
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
 
-  void initThread(const int tid, bool is_rq_thread = false);
-  void deinitThread(const int tid, bool is_rq_thread = false);
+  void cleanup(int tid);
+
+  void initThread(const int tid);
+  void deinitThread(const int tid);
 #ifdef USE_DEBUGCOUNTERS
   debugCounters* debugGetCounters() { return counters; }
   void clearCounters() { counters->clear(); }
@@ -144,7 +155,6 @@ class bundle_skiplist {
     outputKeys[0] = node->key;
     outputValues[0] = node->val;
     return 1;
-    return 0;
   }
 
   bool isInRange(const K& key, const K& lo, const K& hi) {
@@ -180,6 +190,65 @@ class bundle_skiplist {
 
  public:
   long long debugKeySum() { return debugKeySum(p_head); }
+
+  void startCleanup() { rqProvider->startCleanup(); }
+
+  void stopCleanup() { rqProvider->stopCleanup(); }
+
+  bool validateBundles(int tid);
+
+  string getBundleStatsString() {
+    std::cout << "getBundleStatsString" << std::endl << std::flush;
+    unsigned int max = 0;
+    nodeptr max_node = nullptr;
+    long total = 0;
+    stack<nodeptr> s;
+    unordered_set<node_t<K, V>*> unique;
+    nodeptr curr = p_head;
+    nodeptr prev;
+    s.push(curr);
+    while (!s.empty()) {
+      // Try to add the current node to set of unique nodes.
+      curr = s.top();
+      s.pop();
+      auto result = unique.insert(curr);
+      if (result.second) {
+        if (curr->key < KEY_MAX) {
+          int size = curr->rqbundle->getSize();
+          if (size > max) {
+            max = size;
+            max_node = curr;
+          }
+          total += size;
+
+          // Add all nodes in the bundle to the s, if we haven't seen this
+          // node before.
+          BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
+          BundleEntry<node_t<K, V>>* prev; 
+          while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
+            if (bundle_entry->ptr_ != nullptr) {
+              s.push((nodeptr)bundle_entry->ptr_);
+            }
+            prev = bundle_entry;
+            bundle_entry = bundle_entry->next_;
+            if (bundle_entry == nullptr) {
+              std::cout << curr->rqbundle->dump(0) << std::flush;
+            }
+          }
+        }
+      }
+      prev = curr;
+    }
+
+    stringstream ss;
+    ss << "total reachable nodes         : " << unique.size() << endl;
+    ss << "average bundle size           : " << (total / (double)unique.size())
+       << endl;
+    ss << "max bundle size               : " << max << endl;
+    ss << "max is marked                 : " << max_node->marked << endl;
+    ss << max_node->rqbundle->dump(0) << endl;
+    return ss.str();
+  }
 };
 
 #endif  // SKIPLIST_H

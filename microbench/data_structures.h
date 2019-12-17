@@ -4,6 +4,7 @@
 const test_type NO_VALUE = -1;
 const test_type KEY_MIN = numeric_limits<test_type>::min()+1;
 const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less than max(), because the snap collector needs a reserved key larger than this!
+#define KEY_PRECEEDING(key) (key - 1)
 
 #ifdef RQ_SNAPCOLLECTOR
     #define RQ_SNAPCOLLECTOR_OBJECT_TYPES , SnapCollector<node_t<test_type, test_type>, test_type>, SnapCollector<node_t<test_type, test_type>, test_type>::NodeWrapper, ReportItem, CompactReportItem
@@ -233,13 +234,14 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+RLU_OBJ_HEADER_SIZE)<<" including header="<<RLU_OBJ_HEADER_SIZE<<endl;
 
 #elif defined(BUNDLE_LIST)
+    #define BUNDLE_MAX_BUNDLES_UPDATED 2
     #include "record_manager.h"
     #include "rq_bundle.h"
     #include "bundle_lazylist_impl.h"
 
     #define DS_DECLARATION bundle_lazylist<test_type, test_type, MEMMGMT_T>
     #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type> >
-    #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE)
+    #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS + 1, KEY_MIN, KEY_MAX, NO_VALUE)
 
     #define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
     #define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
@@ -250,21 +252,21 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define INIT_RQ_THREAD(tid) ds->initThread(tid, true)
     #define DEINIT_THREAD(tid) ds->deinitThread(tid);
     #define DEINIT_RQ_THREAD(tid) ds->deinitThread(tid, true);
-    #define INIT_ALL 
+    #define INIT_ALL
     #define DEINIT_ALL
-    #define BUNDLE
 
-    #define BUNDLE_OBJ_SIZE (sizeof(rq_bundle_t<node_t<test_type, test_type>>))
+    #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
     
 #elif defined(BUNDLE_SKIPLIST)
+    #define BUNDLE_MAX_BUNDLES_UPDATED 2
     #include "record_manager.h"
     #include "rq_bundle.h"
     #include "bundle_skiplist_impl.h"
 
     #define DS_DECLARATION bundle_skiplist<test_type, test_type, MEMMGMT_T>
     #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type> >
-    #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE, glob.rngs)
+    #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS + 1, KEY_MIN, KEY_MAX, NO_VALUE, glob.rngs)
 
     #define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
     #define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
@@ -272,17 +274,35 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define RQ_AND_CHECK_SUCCESS(rqcnt) rqcnt = ds->RQ_FUNC(tid, key, key+RQSIZE-1, rqResultKeys, (VALUE_TYPE *) rqResultValues)
     #define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt-1]
     #define INIT_THREAD(tid) ds->initThread(tid)
-    #define INIT_RQ_THREAD(tid) ds->initThread(tid, true)
     #define DEINIT_THREAD(tid) ds->deinitThread(tid);
-    #define DEINIT_RQ_THREAD(tid) ds->deinitThread(tid, true);
-    #define INIT_ALL 
+    #define INIT_ALL  
     #define DEINIT_ALL
-    #define BUNDLE
 
-    #define BUNDLE_OBJ_SIZE (sizeof(rq_bundle_t<node_t<test_type, test_type>>))
+    #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
 
+#elif defined(BUNDLE_CITRUS)
+    #define BUNDLE_MAX_BUNDLES_UPDATED 4 
+    #include "record_manager.h"
+    #include "rq_bundle.h"
+    #include "bundle_citrus_impl.h"
 
+    #define DS_DECLARATION bundle_citrustree<test_type, test_type, MEMMGMT_T>
+    #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type> >
+    #define DS_CONSTRUCTOR new DS_DECLARATION(KEY_MAX, NO_VALUE, TOTAL_THREADS + 1)
+
+    #define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+    #define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key).second
+    #define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+    #define RQ_AND_CHECK_SUCCESS(rqcnt) rqcnt = ds->RQ_FUNC(tid, key, key+RQSIZE-1, rqResultKeys, (VALUE_TYPE *) rqResultValues)
+    #define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt-1]
+    #define INIT_THREAD(tid) ds->initThread(tid); urcu::registerThread(tid);
+    #define DEINIT_THREAD(tid) ds->deinitThread(tid); urcu::unregisterThread();
+    #define INIT_ALL urcu::init(TOTAL_THREADS + 1);
+    #define DEINIT_ALL urcu::deinit(TOTAL_THREADS + 1);
+
+    #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
+    #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
 
 #else
     #error "Failed to define a data structure"

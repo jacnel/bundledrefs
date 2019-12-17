@@ -8,6 +8,8 @@
 #ifndef RECOVERY_MANAGER_H
 #define	RECOVERY_MANAGER_H
 
+using namespace std;
+
 #ifdef __CYGWIN__
     struct sigaction { void * sa_sigaction; int sa_flags; int sa_mask; };
     struct siginfo_t {};

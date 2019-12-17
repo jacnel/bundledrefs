@@ -1,7 +1,7 @@
 include ../config.mk
 PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_powerof2) -DCPU_FREQ_GHZ=$(cpu_freq_ghz) -DCPU_FREQ=$(cpu_freq_ghz)
 
-dict=CITRUS_SPIN
+dict=CITRUS_RQ_BUNDLE
 workload=TPCC
 
 CC=g++
@@ -27,7 +27,7 @@ INCLUDE = -I. -I./include -I./benchmarks -I./concurrency_control -I./storage -I.
 
 ######################## DEFINES FOR RQ_DATA STRUCTURES ########################
 #CFLAGS += -Winline
-CFLAGS += -DNDEBUG
+# CFLAGS += -DNDEBUG
 #CFLAGS += -DNO_FREE
 #CFLAGS += -DUSE_STL_HASHLIST
 CFLAGS += -DUSE_SIMPLIFIED_HASHLIST
@@ -66,6 +66,9 @@ INCLUDE += -I../rlu_linked_list
 INCLUDE += -I../skiplist_lock
 INCLUDE += -I../rq
 INCLUDE += -I../rq/snapcollector
+INCLUDE += -I../bundle
+INCLUDE += -I../bundle_skiplist_lock
+INCLUDE += -I../bundle_citrus
 
 #CFLAGS += -DSKIP_PERMUTATIONS
 CFLAGS += $(INCLUDE) -DNOGRAPHITE=1 -O3 -DINDEX_STRUCT=IDX_$(dict) -DWORKLOAD=$(workload) #-Werror
@@ -76,6 +79,7 @@ CFLAGS += $(readonly)
 CFLAGS += -DHASH_PRIMARY_KEYS
 CFLAGS += -DALIGNED_ALLOCATIONS
 #CFLAGS += -DINDEX_NO_RECLAMATION
+# CFLAGS += -DDELIVERY_RQ_100
 LDFLAGS = -L. -L./libs -pthread -g -lrt -std=c++0x -O3 -ldl
 LDFLAGS += $(CFLAGS)
 

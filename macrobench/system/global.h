@@ -117,6 +117,7 @@ extern UInt32 g_init_parallelism;
 // TPCC
 extern UInt32 g_num_wh;
 extern double g_perc_payment;
+extern double g_perc_delivery;
 extern bool g_wh_update;
 extern char * output_file;
 extern UInt32 g_max_items;
@@ -180,7 +181,9 @@ enum TsType {R_REQ, W_REQ, P_REQ, XP_REQ};
         (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_RWLOCK) || \
         (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_HTM_RWLOCK) || \
         (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_UNSAFE) || \
-        (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_SNAPCOLLECTOR)
+        (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_SNAPCOLLECTOR) || \
+        (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE) || \
+        (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
 #define INDEX           index_with_rq
 #elif (INDEX_STRUCT == IDX_BST)
 #define INDEX           index_bst

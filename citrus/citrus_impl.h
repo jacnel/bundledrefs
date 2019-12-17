@@ -308,7 +308,7 @@ retry:
         releaseLock(&(prev->lock));
         releaseLock(&(curr->lock));
         recordmgr->enterQuiescentState(tid);
-        return pair<K, bool>(result, true);
+        return pair<V, bool>(result, true);
     }
     prevSucc = curr;
     succ = rqProvider->read_addr(tid, &curr->child[1]);

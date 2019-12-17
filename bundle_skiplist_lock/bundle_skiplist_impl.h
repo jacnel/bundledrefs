@@ -21,7 +21,6 @@
 #define CAS __sync_val_compare_and_swap
 #define likely
 #define unlikely
-#define CPU_RELAX
 
 template <typename K, typename V>
 static void sl_node_lock(nodeptr p_node) {
@@ -74,13 +73,14 @@ void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
   p_node->val = value;
   p_node->topLevel = height;
   p_node->lock = 0;
-  rqProvider->write_addr(tid, &p_node->marked, (long long)0);
-  rqProvider->write_addr(tid, &p_node->fullyLinked, (long long)0);
+  p_node->marked = (long long)0;
+  p_node->fullyLinked = (long long)0;
+  rqProvider->initBundle(0, &p_node->rqbundle, (long)key);
 }
 
 template <typename K, typename V, class RecordMgr>
 nodeptr bundle_skiplist<K, V, RecordMgr>::allocateNode(const int tid) {
-  nodeptr nnode = recmgr->template allocate<node_t<K, V> >(tid);
+  nodeptr nnode = recmgr->template allocate<node_t<K, V>>(tid);
   if (nnode == NULL) {
     cout << "ERROR: out of memory" << endl;
     exit(-1);
@@ -133,9 +133,9 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
       KEY_MIN(_KEY_MIN),
       KEY_MAX(_KEY_MAX),
       NO_VALUE(NO_VALUE) {
-  rqProvider = new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
-                         RecManager, true, false>(numProcesses, this,
-                                                  recmgr);
+  rqProvider =
+      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
+                     RecManager, true, false>(numProcesses, this, recmgr);
 
   // note: initThread calls rqProvider->initThread
 
@@ -145,11 +145,11 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
 
   p_tail = allocateNode(dummyTid);
   initNode(dummyTid, p_tail, KEY_MAX, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  rqProvider->init_node(dummyTid, p_tail, nullptr);
+  p_tail->fullyLinked = 1;
 
   p_head = allocateNode(dummyTid);
   initNode(dummyTid, p_head, KEY_MIN, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  rqProvider->init_node(dummyTid, p_head, p_tail);
+  p_head->fullyLinked = 1;
 
   for (i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
     p_head->p_next[i] = p_tail;
@@ -175,7 +175,7 @@ bundle_skiplist<K, V, RecManager>::~bundle_skiplist() {
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_skiplist<K, V, RecManager>::initThread(const int tid, bool is_rq_thread) {
+void bundle_skiplist<K, V, RecManager>::initThread(const int tid) {
   if (init[tid])
     return;
   else
@@ -183,13 +183,10 @@ void bundle_skiplist<K, V, RecManager>::initThread(const int tid, bool is_rq_thr
 
   recmgr->initThread(tid);
   rqProvider->initThread(tid);
-  if (is_rq_thread) {
-    rqProvider->registerRQThread(tid);
-  }
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_skiplist<K, V, RecManager>::deinitThread(const int tid, bool is_rq_thread) {
+void bundle_skiplist<K, V, RecManager>::deinitThread(const int tid) {
   if (!init[tid])
     return;
   else
@@ -197,9 +194,6 @@ void bundle_skiplist<K, V, RecManager>::deinitThread(const int tid, bool is_rq_t
 
   recmgr->deinitThread(tid);
   rqProvider->deinitThread(tid);
-  if (is_rq_thread) {
-    rqProvider->unregisterRQThread(tid);
-  }
 }
 
 template <typename K, typename V, class RecManager>
@@ -215,9 +209,8 @@ bool bundle_skiplist<K, V, RecManager>::contains(const int tid, K key) {
   bool res;
   recmgr->leaveQuiescentState(tid, true);
   lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
-  res = (lFound != -1) &&
-        rqProvider->read_addr(tid, &p_succs[lFound]->fullyLinked) &&
-        !rqProvider->read_addr(tid, &p_succs[lFound]->marked);
+  res = (lFound != -1) && p_succs[lFound]->fullyLinked &&
+        !p_succs[lFound]->marked;
 #ifdef RQ_SNAPCOLLECTOR
   if (lFound != -1) rqProvider->search_report_target_key(tid, key, p_found);
 #endif
@@ -239,9 +232,8 @@ const pair<V, bool> bundle_skiplist<K, V, RecManager>::find(const int tid,
   bool res;
   recmgr->leaveQuiescentState(tid, true);
   lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
-  res = (lFound != -1) &&
-        rqProvider->read_addr(tid, &p_succs[lFound]->fullyLinked) &&
-        !rqProvider->read_addr(tid, &p_succs[lFound]->marked);
+  res = (lFound != -1) && p_succs[lFound]->fullyLinked &&
+        !p_succs[lFound]->marked;
 #ifdef RQ_SNAPCOLLECTOR
   if (lFound != -1) rqProvider->search_report_target_key(tid, key, p_found);
 #endif
@@ -279,8 +271,8 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
     lFound = find_impl(tid, key, p_preds, p_succs, NULL);
     if (lFound != -1) {
       p_node_found = p_succs[lFound];
-      if (!rqProvider->read_addr(tid, &p_node_found->marked)) {
-        while (!rqProvider->read_addr(tid, &p_node_found->fullyLinked)) {
+      if (!p_node_found->marked) {
+        while (!p_node_found->fullyLinked) {
           CPU_RELAX;
         }  // keep spinning
         recmgr->enterQuiescentState(tid);
@@ -294,7 +286,7 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
           return ret;
         } else {
           cout << "ERROR: insert-replace functionality not implemented for "
-                  "lockfree_skiplist_impl"
+                  "bundle_skiplist_impl"
                << endl;
           exit(-1);
         }
@@ -314,9 +306,8 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       }
       highestLocked = level;
       // make sure nothing has changed in between
-      valid = !rqProvider->read_addr(tid, &p_pred->marked) &&
-              !rqProvider->read_addr(tid, &p_succ->marked) &&
-              p_pred->p_next[level] == p_succ;
+      valid = (!p_pred->marked && !p_succ->marked &&
+               (p_pred->p_next[level] == p_succ));
     }
 
     if (valid) {
@@ -326,8 +317,9 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
                     ((long long)p_new_node) % (1 << 12));
 #endif
       initNode(tid, p_new_node, key, value, topLevel);
+      sl_node_lock(p_new_node);
+
       // Initialize bundle with the lowest level pointer.
-      rqProvider->init_node(tid, p_new_node, p_succs[0]);
       p_new_node->topLevel = topLevel;
       for (level = 0; level <= topLevel; level++) {
         p_new_node->p_next[level] = p_succs[level];
@@ -336,13 +328,25 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       for (level = 0; level <= topLevel; level++) {
         p_preds[level]->p_next[level] = p_new_node;
       }
+      Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle,
+                                         p_new_node->rqbundle, nullptr};
+      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
       rqProvider->linearize_update_at_write(
-          tid, &p_new_node->fullyLinked, (long long)1, p_preds[0]->rqbundle,
-          p_new_node->rqbundle, p_new_node, true);
+          tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs, INSERT);
+      if (!p_preds[0]->validate()) {
+        std::cout << "Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
+                  << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+                  << p_preds[0]->p_next[0]
+                  << " vs. [key=" << p_preds[0]->rqbundle->getHead()->ptr_->key
+                  << ",marked=" << p_preds[0]->rqbundle->getHead()->ptr_->marked
+                  << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
+        exit(1);
+      }
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
 #endif
       // p_new_node->fullyLinked = 1;
+      sl_node_unlock(p_new_node);
       done = 1;
     }
 
@@ -387,20 +391,17 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
     }
     p_victim = p_succs[lFound];
 
-    if ((!isMarked) || (rqProvider->read_addr(tid, &p_victim->fullyLinked) &&
-                        p_victim->topLevel == lFound &&
-                        !rqProvider->read_addr(tid, &p_victim->marked))) {
+    if ((!isMarked) || (p_victim->fullyLinked &&
+                        (p_victim->topLevel == lFound) && !p_victim->marked)) {
       if (!isMarked) {
         topLevel = p_victim->topLevel;
         sl_node_lock(p_victim);
-        if (rqProvider->read_addr(tid, &p_victim->marked)) {
+        if (p_victim->marked) {
           sl_node_unlock(p_victim);
           // ret = 0; ret is already NO_VALUE = fail
           recmgr->enterQuiescentState(tid);
           break;
         }
-        // rqProvider->write_addr(tid, &p_victim->marked, 1);
-        // isMarked = 1;
       }
 
       highestLocked = -1;
@@ -413,26 +414,32 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
           sl_node_lock(p_pred);
         }
         highestLocked = level;
-        valid = !rqProvider->read_addr(tid, &p_pred->marked) &&
-                p_pred->p_next[level] == p_victim;
+        valid = (!p_pred->marked && (p_pred->p_next[level] == p_victim));
       }
 
       if (valid) {
+        Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle, nullptr};
+        nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
         rqProvider->linearize_update_at_write(
-            tid, &p_victim->marked, (long long)1, p_preds[0]->rqbundle, nullptr,
-            p_victim->p_next[0], false);
-        // p_victim->marked = 1;
-
-        rqProvider->announce_physical_deletion(tid, {nullptr});
+            tid, &p_victim->marked, (long long)1, bundles, ptrs, REMOVE);
         for (level = topLevel; level >= 0; level--) {
           p_preds[level]->p_next[level] = p_victim->p_next[level];
         }
-        rqProvider->physical_deletion_succeeded(tid, {nullptr});
+        nodeptr deletedNodes[] = {p_victim, nullptr};
+        rqProvider->physical_deletion_succeeded(tid, deletedNodes);
+        if (!p_preds[0]->validate()) {
+          std::cout << "Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
+                    << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+                    << p_preds[0]->p_next[0] << " vs. [key="
+                    << p_preds[0]->rqbundle->getHead()->ptr_->key << ",marked="
+                    << p_preds[0]->rqbundle->getHead()->ptr_->marked << "] "
+                    << p_preds[0]->rqbundle->getHead()->ptr_ << " "
+                    << p_preds[0]->rqbundle->dump(0) << std::flush;
+          exit(1);
+        }
         ret = p_victim->val;
         sl_node_unlock(p_victim);
       } else {
-        // rqProvider->write_addr(tid, &p_victim->marked, 0);
-        // isMarked = 0;
         sl_node_unlock(p_victim);
       }
 
@@ -462,21 +469,78 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   K* const resultKeys,
                                                   V* const resultValues) {
   //    cout<<"rangeQuery(lo="<<lo<<" hi="<<hi<<")"<<endl;
-  recmgr->leaveQuiescentState(tid, true);
-  // use the find function to find the low key
-  nodeptr pred = p_head;
-  nodeptr curr = NULL;
-  for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
-    curr = pred->p_next[level];
-    while (curr->key < lo) {
-      pred = curr;
+  timestamp_t ts;
+  long i = 0;
+  while (true) {
+    DEBUG_PRINT("rangeQuery");
+    int cnt = 0;
+    recmgr->leaveQuiescentState(tid, true);
+    ts = rqProvider->start_traversal(tid);
+    SOFTWARE_BARRIER;
+    nodeptr pred = p_head;
+    nodeptr curr = nullptr;
+    for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];
+      while (curr->key < lo) {
+        pred = curr;
+        curr = pred->p_next[level];
+      }
+    }
+    // Perform the traversal using the bundles.
+    curr = pred->rqbundle->getPtrByTimestamp(ts);
+    while (curr != nullptr && curr->key <= hi) {
+      if (curr->key >= lo) {
+        cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+      }
+      curr = curr->rqbundle->getPtrByTimestamp(ts);
+    }
+    rqProvider->end_traversal(tid);
+    recmgr->enterQuiescentState(tid);
+
+    // Traversal successful.
+    if (curr != nullptr) {
+      return cnt;
     }
   }
-  // Perform the traversal using the bundles.
-  int cnt = rqProvider->traverse(tid, pred, hi, resultKeys, resultValues);
+}
+
+template <typename K, typename V, class RecManager>
+void bundle_skiplist<K, V, RecManager>::cleanup(int tid) {
+  recmgr->leaveQuiescentState(tid);
+  BUNDLE_INIT_CLEANUP(rqProvider);
+  BUNDLE_CLEAN_BUNDLE(p_head->rqbundle);
+  for (nodeptr curr = p_head->p_next[0]; curr->key != KEY_MAX;
+       curr = curr->p_next[0]) {
+    if (!curr->marked) {
+      BUNDLE_CLEAN_BUNDLE(curr->rqbundle);
+    }
+  }
   recmgr->enterQuiescentState(tid);
-  return cnt;
+}
+
+template <typename K, typename V, class RecManager>
+bool bundle_skiplist<K, V, RecManager>::validateBundles(int tid) {
+  std::cout << "Checking if clean..." << std::endl;
+  bool valid = true;
+  for (nodeptr curr = p_head->p_next[0]; curr->key != KEY_MAX;
+       curr = curr->rqbundle->getHead()->ptr_) {
+    if (curr->rqbundle->getHead()->ptr_ != curr->p_next[0]) {
+      std::cout << "Pointer mismatch! [key=" << curr->p_next[0]->key
+                << ",marked=" << curr->p_next[0]->marked << "] "
+                << curr->p_next[0]
+                << " vs. [key=" << curr->rqbundle->getHead()->ptr_->key
+                << ",marked=" << curr->rqbundle->getHead()->ptr_->marked << "] "
+                << curr->rqbundle->dump(0) << std::flush;
+      valid = false;
+    }
+#ifdef BUNDLE_CLEANUP
+    if (curr->rqbundle->getSize() > 1) {
+      std::cout << curr->rqbundle->dump(0) << std::flush;
+      return false;
+    }
+#endif
+  }
+  return valid;
 }
 
 #endif /* SKIPLIST_LOCK_IMPL_H */
