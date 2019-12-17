@@ -9,10 +9,14 @@ public:
     void clear();
     double timeContains;
     double timeInsert;
+    double timeRemove;
     double timeRangeQuery;
     uint64_t numContains;
     uint64_t numInsert;
+    uint64_t numRemove;
     uint64_t numRangeQuery;
+    uint64_t lenRangeQuery;
+    uint64_t numLenRangeQuery;
 };
 
 class Stats_thd {

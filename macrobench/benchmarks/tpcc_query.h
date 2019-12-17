@@ -54,6 +54,7 @@ private:
     void gen_payment(uint64_t thd_id);
     void gen_new_order(uint64_t thd_id);
     void gen_order_status(uint64_t thd_id);
+    void gen_delivery(uint64_t thd_id);
 };
 
 #endif

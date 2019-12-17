@@ -188,12 +188,16 @@ void txn_man::insert_row(row_t * row, table_t * table) {
 // return number N of keys found
 // set results[0...N-1] to the values associated with these keys
 int
-txn_man::index_range_query(INDEX * index, idx_key_t low, idx_key_t high, idx_key_t * resultKeys, itemid_t ** resultValues, int part_id) {
+txn_man::index_range_query(INDEX * index, idx_key_t low, idx_key_t high, idx_key_t * resultKeys, itemid_t ** resultValues, int part_id, bool countLen) {
 	uint64_t starttime = get_sys_clock();
         int numResults = 0;
 	index->index_range_query(low, high, resultKeys, resultValues, &numResults, part_id);
 	INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].numRangeQuery, 1);
 	INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].timeRangeQuery, get_sys_clock() - starttime);
+  if (countLen) {
+    INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].lenRangeQuery, numResults);
+    INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].numLenRangeQuery, 1);
+  }
 	return numResults;
 }
 #endif
@@ -222,6 +226,14 @@ txn_man::index_insert(INDEX * index, uint64_t key, row_t * row, int64_t part_id)
     get_wl()->index_insert(index, key, row, part_id);
     INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].numInsert, 1);
     INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].timeInsert, get_sys_clock() - starttime);
+}
+
+void
+txn_man::index_remove(INDEX * index, uint64_t key, int64_t part_id) {
+    uint64_t starttime = get_sys_clock();
+    get_wl()->index_remove(index, key, part_id);
+    INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].numRemove, 1);
+    INC_TMP_STATS(get_thd_id(), stats_indexes[index->index_id].timeRemove, get_sys_clock() - starttime);
 }
 
 RC txn_man::finish(RC rc) {

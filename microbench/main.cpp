@@ -148,7 +148,6 @@ void *thread_prefill(void *_id) {
 
     VERBOSE if (cnt && ((cnt % 1000000) == 0))
         COUTATOMICTID("op# " << cnt << endl);
-    // TODO: Generate keys using a zipfian distribution.
     int key = rng->nextNatural(MAXKEY);
     double op = rng->nextNatural(100000000) / 1000000.;
     GSTATS_TIMER_RESET(tid, timer_latency);
@@ -634,6 +633,12 @@ void trial() {
   glob.start = true;
   SOFTWARE_BARRIER;
 
+#ifdef RQ_BUNDLE
+#ifdef BUNDLE_CLEANUP
+  ds->startCleanup();
+#endif
+#endif
+
   // pthread_join is replaced with sleeping, and kill threads if they run too
   // long method: sleep for the desired time + a small epsilon,
   //      then check "running.load()" to see if we're done.
@@ -698,6 +703,17 @@ void trial() {
       exit(-1);
     }
   }
+
+#ifdef RQ_BUNDLE
+#ifdef BUNDLE_CLEANUP
+  ds->stopCleanup();
+#endif
+  if (ds->validateBundles(0)) {
+    std::cout << "Bundle validation OK." << std::endl;
+  } else {
+    std::cout << "Bundle validation failed." << std::endl;
+  }
+#endif
 
   COUTATOMIC(endl);
   COUTATOMIC(
@@ -855,8 +871,10 @@ void printOutput() {
   COUTATOMIC(endl);
 
 #ifdef RQ_BUNDLE
-  COUTATOMIC(ds->getBundleStatsString());
+#ifdef BUNDLE_PRINT_BUNDLE_STATS
+  COUTATOMIC(ds->getBundleStatsString() << flush);
   COUTATOMIC(endl);
+#endif
 #endif
 
 #if defined(USE_DEBUGCOUNTERS) || defined(USE_GSTATS)

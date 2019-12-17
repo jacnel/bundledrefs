@@ -36,6 +36,8 @@ class node_t {
                // at least as large as a machine word)
   Bundle<node_t>* volatile rqbundle;
 
+  ~node_t() { delete rqbundle; }
+
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
     return marked;
@@ -49,6 +51,7 @@ bundle_lazylist<K, V, RecManager>::bundle_lazylist(const int numProcesses,
                                                    const K _KEY_MIN,
                                                    const K _KEY_MAX,
                                                    const V _NO_VALUE)
+    // Plus 1 for the background thread.
     : recordmgr(new RecManager(numProcesses, SIGQUIT)),
       rqProvider(
           new RQProvider<K, V, node_t<K, V>, bundle_lazylist<K, V, RecManager>,
@@ -65,7 +68,13 @@ bundle_lazylist<K, V, RecManager>::bundle_lazylist(const int numProcesses,
   const int tid = 0;
   initThread(tid);
   nodeptr max = new_node(tid, KEY_MAX, 0, NULL);
-  head = new_node(tid, KEY_MIN, 0, max);
+  head = new_node(tid, KEY_MIN, 0, NULL);
+
+  // Perform linearization of max to ensure bundles correctly added.
+  Bundle<node_t<K, V>>* bundles[] = {head->rqbundle, nullptr};
+  nodeptr ptrs[] = {max, nullptr};
+  rqProvider->linearize_update_at_write(tid, &head->next, max, bundles, ptrs,
+                                        INSERT);
 }
 
 template <typename K, typename V, class RecManager>
@@ -79,6 +88,7 @@ bundle_lazylist<K, V, RecManager>::~bundle_lazylist() {
   }
   recordmgr->deallocate(dummyTid, curr);
   delete rqProvider;
+  recordmgr->printStatus();
   delete recordmgr;
 #ifdef USE_DEBUGCOUNTERS
   delete counters;
@@ -121,7 +131,7 @@ nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
   nnode->next = next;
   nnode->marked = 0LL;
   nnode->lock = false;
-  nnode->rqbundle = new Bundle<node_t<K, V>>();
+  rqProvider->initBundle(tid, &nnode->rqbundle, key);
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -132,9 +142,7 @@ template <typename K, typename V, class RecManager>
 inline int bundle_lazylist<K, V, RecManager>::validateLinks(const int tid,
                                                             nodeptr pred,
                                                             nodeptr curr) {
-  return (!pred->marked &&
-          !curr->marked &&
-          (pred->next == curr));
+  return (!pred->marked && !curr->marked && (pred->next == curr));
 }
 
 template <typename K, typename V, class RecManager>
@@ -203,11 +211,11 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       result = NO_VALUE;
       newnode = new_node(tid, key, val, curr);
 
-      Bundle<node_t<K, V>>* bundles[] = {pred->rqbundle, newnode->rqbundle,
+      Bundle<node_t<K, V>>* bundles[] = {newnode->rqbundle, pred->rqbundle,
                                          nullptr};
-      nodeptr ptrs[] = {newnode, curr, nullptr};
+      nodeptr ptrs[] = {curr, newnode, nullptr};
       rqProvider->linearize_update_at_write(tid, &pred->next, newnode, bundles,
-                                            ptrs);
+                                            ptrs, INSERT);
       releaseLock(&(pred->lock));
       recordmgr->enterQuiescentState(tid);
       return result;
@@ -252,7 +260,7 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
       Bundle<node_t<K, V>>* bundles[] = {pred->rqbundle, nullptr};
       nodeptr ptrs[] = {c_nxt, nullptr};
       rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL, bundles,
-                                            ptrs);
+                                            ptrs, REMOVE);
 
       pred->next = c_nxt;
       nodeptr deletedNodes[] = {curr, nullptr};
@@ -274,10 +282,10 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   const K& hi,
                                                   K* const resultKeys,
                                                   V* const resultValues) {
-  recordmgr->leaveQuiescentState(tid, true);
   timestamp_t ts;
   int cnt = 0;
   for (;;) {
+    recordmgr->leaveQuiescentState(tid, true);
     ts = rqProvider->start_traversal(tid);
     nodeptr pred = head;
     nodeptr curr = pred->next;
@@ -302,23 +310,40 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
       return cnt;
     }
   }
+}
 
-  // recordmgr->leaveQuiescentState(tid, true);
-  // int cnt = 0;
-  // timestamp_t ts = rqProvider->start_traversal(tid);
-  // nodeptr curr = rqProvider->read_addr(tid, &head);
-  // // Traverse using timestamps to the first node in the range.
-  // while (curr->key < KEY_PRECEEDING(lo)) {
-  //   curr = curr->rqbundle->getPtrByTimestamp(ts);
-  // }
-  // // Traverse range.
-  // while (curr != nullptr && curr->key <= hi) {
-  //   cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
-  //   curr = curr->rqbundle->getPtrByTimestamp(ts);
-  // }
-  // rqProvider->end_traversal(tid);
-  // recordmgr->enterQuiescentState(tid);
-  // return cnt;
+template <typename K, typename V, class RecManager>
+void bundle_lazylist<K, V, RecManager>::cleanup(int tid) {
+  // Walk the list using the newest edge and reclaim bundle entries.
+  recordmgr->leaveQuiescentState(tid);
+  BUNDLE_INIT_CLEANUP(rqProvider);
+  while (head == nullptr)
+    ;
+  BUNDLE_CLEAN_BUNDLE(head->rqbundle);
+  for (nodeptr curr = head->next; curr->key != KEY_MAX; curr = curr->next) {
+    if (!curr->marked) {
+      BUNDLE_CLEAN_BUNDLE(curr->rqbundle);
+    }
+  }
+  recordmgr->enterQuiescentState(tid);
+}
+
+template <typename K, typename V, class RecManager>
+bool bundle_lazylist<K, V, RecManager>::validateBundles(int tid) {
+  nodeptr curr = head;
+  bool valid = true;
+  while (curr->key < KEY_MAX) {
+    if (curr->rqbundle->getHead()->ptr_ != curr->next) {
+      std::cout << "Pointer mismatch! [key=" << curr->next->key
+                << ",marked=" << curr->next->marked << "] " << curr->next
+                << " vs. [key=" << curr->rqbundle->getHead()->ptr_->key
+                << ",marked=" << curr->rqbundle->getHead()->ptr_->marked << "] "
+                << curr->rqbundle->dump(0) << std::flush;
+      valid = false;
+    }
+    curr = curr->next;
+  }
+  return valid;
 }
 
 template <typename K, typename V, class RecManager>

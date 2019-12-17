@@ -1,8 +1,8 @@
 #ifndef SKIPLIST_H
 #define SKIPLIST_H
 
-#include <unordered_set>
 #include <stack>
+#include <unordered_set>
 
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
 // define BEFORE including rq_provider.h
@@ -49,6 +49,12 @@ class node_t {
     node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
     Bundle<node_t>* volatile rqbundle;
   };
+
+  ~node_t() { delete rqbundle; }
+
+  bool validate() {
+    return p_next[0] == rqbundle->getHead()->ptr_;
+  }
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
@@ -109,6 +115,8 @@ class bundle_skiplist {
   V erase(const int tid, const K& key);
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
+
+  void cleanup(int tid);
 
   void initThread(const int tid);
   void deinitThread(const int tid);
@@ -183,13 +191,21 @@ class bundle_skiplist {
  public:
   long long debugKeySum() { return debugKeySum(p_head); }
 
+  void startCleanup() { rqProvider->startCleanup(); }
+
+  void stopCleanup() { rqProvider->stopCleanup(); }
+
+  bool validateBundles(int tid);
+
   string getBundleStatsString() {
-    unsigned int max = -1;
-    long num_nodes = 0;
+    std::cout << "getBundleStatsString" << std::endl << std::flush;
+    unsigned int max = 0;
+    nodeptr max_node = nullptr;
     long total = 0;
     stack<nodeptr> s;
     unordered_set<node_t<K, V>*> unique;
     nodeptr curr = p_head;
+    nodeptr prev;
     s.push(curr);
     while (!s.empty()) {
       // Try to add the current node to set of unique nodes.
@@ -197,30 +213,40 @@ class bundle_skiplist {
       s.pop();
       auto result = unique.insert(curr);
       if (result.second) {
-        // If this is an unseen node, update stats.
-        ++num_nodes;
-        int size = curr->rqbundle->getSize();
-        if (size > max) {
-          max = size;
-        }
-        total += size;
-
-        // Add all nodes in the bundle to the s, if we haven't seen this
-        // node before.
-        BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
-        while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
-          if (bundle_entry->ptr_ != nullptr) {
-            s.push((nodeptr)bundle_entry->ptr_);
+        if (curr->key < KEY_MAX) {
+          int size = curr->rqbundle->getSize();
+          if (size > max) {
+            max = size;
+            max_node = curr;
           }
-          bundle_entry = bundle_entry->next_;
+          total += size;
+
+          // Add all nodes in the bundle to the s, if we haven't seen this
+          // node before.
+          BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
+          BundleEntry<node_t<K, V>>* prev; 
+          while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
+            if (bundle_entry->ptr_ != nullptr) {
+              s.push((nodeptr)bundle_entry->ptr_);
+            }
+            prev = bundle_entry;
+            bundle_entry = bundle_entry->next_;
+            if (bundle_entry == nullptr) {
+              std::cout << curr->rqbundle->dump(0) << std::flush;
+            }
+          }
         }
       }
+      prev = curr;
     }
 
     stringstream ss;
-    ss << "total reachable nodes         : " << num_nodes << endl;
-    ss << "average bundle size           : " << (total / (double)num_nodes)
+    ss << "total reachable nodes         : " << unique.size() << endl;
+    ss << "average bundle size           : " << (total / (double)unique.size())
        << endl;
+    ss << "max bundle size               : " << max << endl;
+    ss << "max is marked                 : " << max_node->marked << endl;
+    ss << max_node->rqbundle->dump(0) << endl;
     return ss.str();
   }
 };

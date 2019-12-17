@@ -68,6 +68,7 @@ UInt32 g_init_parallelism = INIT_PARALLELISM;
 
 UInt32 g_num_wh = NUM_WH;
 double g_perc_payment = PERC_PAYMENT;
+double g_perc_delivery = PERC_DELIVERY;
 bool g_wh_update = WH_UPDATE;
 char * output_file = NULL;
 

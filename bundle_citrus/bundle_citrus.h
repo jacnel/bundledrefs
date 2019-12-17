@@ -55,6 +55,22 @@ struct node_t {
   bool marked;
 
   Bundle<node_t<K, V>>* rqbundle[2];
+
+  bool validate() {
+    bool valid = true;
+    if (rqbundle[0]->getHead()->ptr_ != child[0]) {
+      valid = false;
+    }
+    if (rqbundle[1]->getHead()->ptr_ != child[1]) {
+      valid = false;
+    }
+    return valid;
+  }
+
+  ~node_t() {
+    delete rqbundle[0];
+    delete rqbundle[1];
+  }
 };
 
 #define nodeptr node_t<K, V>*
@@ -106,6 +122,9 @@ class bundle_citrustree {
   const pair<V, bool> find(const int tid, const K& key);
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
+  void cleanup(int tid);
+  void startCleanup() { rqProvider->startCleanup(); }
+  void stopCleanup() { rqProvider->stopCleanup(); }
   bool contains(const int tid, const K& key);
   int size();  // warning: this is a linear time operation, and is not
                // linearizable
@@ -162,9 +181,12 @@ class bundle_citrustree {
   }
   long long getSize() { return getSizeInNodes(); }
 
+  bool validateBundles(int tid);
+
   string getBundleStatsString() {
-    unsigned int max = -1;
-    long num_nodes = 0;
+    unsigned int max = 0;
+    nodeptr max_node = nullptr;
+    int max_direction = 0;
     long left_total = 0;
     long right_total = 0;
     stack<nodeptr> s;
@@ -178,13 +200,16 @@ class bundle_citrustree {
       auto result = unique.insert(curr);
       if (result.second) {
         // If this is an unseen node, update stats.
-        ++num_nodes;
         int left = curr->rqbundle[0]->getSize();
         int right = curr->rqbundle[1]->getSize();
         if (left >= right && left > max) {
           max = left;
+          max_node = curr;
+          max_direction = 0;
         } else if (right > max) {
           max = right;
+          max_node = curr;
+          max_direction = 1;
         }
         left_total += left;
         right_total += right;
@@ -214,13 +239,15 @@ class bundle_citrustree {
     }
 
     stringstream ss;
-    ss << "total reachable nodes         : " << num_nodes << endl;
+    ss << "total reachable nodes         : " << unique.size() << endl;
     ss << "average bundle size           : "
-       << ((left_total + right_total) / (double)num_nodes) << endl;
-    ss << "average left bundle size      : " << (left_total / (double)num_nodes)
-       << endl;
+       << ((left_total + right_total) / (double)unique.size()) << endl;
+    ss << "average left bundle size      : "
+       << (left_total / (double)unique.size()) << endl;
     ss << "average right bundle size     : "
-       << (right_total / (double)num_nodes) << endl;
+       << (right_total / (double)unique.size()) << endl;
+    ss << "max bundle size               : " << max << endl;
+    ss << max_node->rqbundle[max_direction]->dump(0);
     return ss.str();
   }
 

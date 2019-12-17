@@ -2,6 +2,7 @@
 #define RQ_BUNDLE_H
 
 #include <pthread.h>
+#include <sys/types.h>
 #include <atomic>
 #include <mutex>
 #include "common_bundle.h"
@@ -9,6 +10,19 @@
 #include "rq_debugging.h"
 
 #define CPU_RELAX asm volatile("pause\n" ::: "memory")
+#define BUNDLE_CLEANUP_SLEEP 0
+
+#define DEBUG_PRINT(str)                         \
+  if ((i + 1) % 10000 == 0) {                    \
+    std::cout << str << std::endl << std::flush; \
+  }                                              \
+  ++i;
+
+enum op {
+  NOP,
+  INSERT,
+  REMOVE
+};
 
 template <typename NodeType>
 class BundleEntry {
@@ -16,13 +30,26 @@ class BundleEntry {
   volatile timestamp_t ts_;
   NodeType *volatile ptr_;
   BundleEntry *volatile next_;
+  volatile timestamp_t deleted_ts_;
+  op op_;
 
-  explicit BundleEntry(timestamp_t ts, NodeType *ptr, BundleEntry *next)
-      : ts_(ts), ptr_(ptr), next_(next) {}
+  explicit BundleEntry(timestamp_t ts, NodeType *ptr, BundleEntry *next, op o)
+      : ts_(ts), ptr_(ptr), next_(next), op_(o) {
+    deleted_ts_ = BUNDLE_NULL_TIMESTAMP;
+  }
 
   void set_ts(const timestamp_t ts) { ts_ = ts; }
   void set_ptr(NodeType *const ptr) { ptr_ = ptr; }
   void set_next(BundleEntry *const next) { next_ = next; }
+  void mark(timestamp_t ts) { deleted_ts_ = ts; }
+  timestamp_t marked() { return deleted_ts_; }
+
+  inline void validate() {
+    if (ts_ < next_->ts_) {
+      std::cout << "Invalid bundle" << std::endl;
+      exit(1);
+    }
+  }
 };
 
 // A bundle has two sources of sycnrhonization. The first is the lock that
@@ -34,107 +61,172 @@ template <typename NodeType>
 class Bundle {
  private:
   std::atomic<BundleEntry<NodeType> *> head_;
-  BundleEntry<NodeType> *tail_;
+  BundleEntry<NodeType> *volatile tail_;
   volatile int updates = 0;
-  volatile int last_recycled = 0;
+  BundleEntry<NodeType> *volatile last_recycled = nullptr;
   volatile int oldest_edge = 0;
 
  public:
-  explicit Bundle() {
-    head_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
-    tail_ = head_;
+  explicit Bundle(long k) {
+    tail_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr,
+                                      (BundleEntry<NodeType> * volatile) k, NOP);
+    head_ = tail_;
+  }
+
+  ~Bundle() {
+    BundleEntry<NodeType> *curr = head_;
+    BundleEntry<NodeType> *next;
+    while (curr != tail_) {
+      next = curr->next_;
+      delete curr;
+      curr = next;
+    }
+    delete tail_;
   }
 
   inline BundleEntry<NodeType> *getHead() { return head_; }
+
+  void markAllEntries() {
+    BundleEntry<NodeType> *curr = head_;
+    while (curr != tail_) {
+      curr->mark(-1);
+      curr = curr->next_;
+    }
+  }
 
   // Returns a reference to the node that immediately followed at timestamp ts.
   inline NodeType *volatile getPtrByTimestamp(timestamp_t ts) {
     // Start at head and work backwards until edge is found.
     BundleEntry<NodeType> *curr = head_;
-    // bool once = false;
-    while (curr->ts_ == BUNDLE_BUSY_TIMESTAMP) {
+    long i = 0;
+    while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+       // DEBUG_PRINT("getPtrByTimestamp");
       CPU_RELAX;
     }
-    while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ > ts) {
+    while (curr != tail_ && curr->ts_ > ts) {
+      assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
       curr = curr->next_;
+    }
+    if (curr->marked()) {
+      std::cout << dump(0) << std::flush;
+      exit(1);
     }
     return curr->ptr_;
   }
 
   // Inserts a new rq_bundle_node at the head of the bundle.
-  inline void insertAtHead(BundleEntry<NodeType> *new_entry) {
-    BundleEntry<NodeType> *expected = head_;
+  inline void insertAtHead(BundleEntry<NodeType> *const new_entry) {
+    BundleEntry<NodeType> *expected;
     while (true) {
-      new_entry->set_next(expected);
-      while (expected->ts_ == BUNDLE_BUSY_TIMESTAMP) {
+      expected = head_;
+      new_entry->next_ = expected;
+      long i = 0;
+      while (expected->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+         // DEBUG_PRINT("insertAtHead");
         CPU_RELAX;
       }
       if (head_.compare_exchange_weak(expected, new_entry)) {
         ++updates;
         return;
       }
-      expected = head_;
     }
   }
 
   // [UNSAFE] Returns the number of bundle entries.
-  inline int getSize() {
+  int getSize() {
     int size = 0;
     BundleEntry<NodeType> *curr = head_;
-    while (curr->ts_ != BUNDLE_NULL_TIMESTAMP) {
+    while (curr != tail_) {
+      if (curr->marked()) {
+        std::cout << "taking a dump" << std::endl << std::flush;
+        std::cout << dump(0) << std::flush;
+        exit(1);
+      }
       ++size;
       curr = curr->next_;
+      if (curr == nullptr) {
+        std::cout << dump(0) << std::flush;
+        exit(1);
+      }
     }
     return size;
   }
 
-  // Recycles any edges that are older than ts. At the moment this should be
+  // Reclaims any edges that are older than ts. At the moment this should be
   // ordered before adding a new entry to the bundle.
-  inline void recycleEdges(timestamp_t ts) {
-    //   // And it should not be called on a newly initialized bundle node.
-    //   if (head_ == tail_) {
-    //     dump(ts);
-    //     exit(1);
-    //   }
-    //   // Read the head and wait for a concurrent update.
-    //   BundleEntry<NodeType> *const start = head_;
-    //   while (start->ts_ == BUNDLE_BUSY_TIMESTAMP)
-    //     ;
-    //   if (ts == BUNDLE_NULL_TIMESTAMP) {
-    //     // If there are no active RQs then we can recycle all edges, but the
-    //     // newest (i.e., head).
-    //     last_recycled = start->next_->ts_;
-    //     oldest_edge = start->ts_;
-    //     std::atomic::atomic_compare_exchange_weak(
-    //         (std::atomic<BundleEntry<NodeType> *> *)(&(start->next_)),
-    //         start->next_, tail_);
-    //   } else {
-    //     // Traverse from head and remove nodes that are lower than ts.
-    //     BundleEntry<NodeType> *curr = start;
-    //     while (curr->ts_ != BUNDLE_NULL_TIMESTAMP && curr->ts_ > ts) {
-    //       curr = curr->next_;
-    //     }
-    //     // curr points to the oldest edge required by any active RQs.
-    //     if (curr->ts_ != BUNDLE_NULL_TIMESTAMP) {
-    //       last_recycled = curr->next_->ts_;
-    //       oldest_edge = curr->ts_;
-    //       curr->next_ = tail_;
-    //     }
-    //   }
+  inline void reclaimEntries(timestamp_t ts) {
+    // Obtain a reference to the pred non-reclaimable entry and first
+    // reclaimable one.
+    BundleEntry<NodeType> *pred = head_;
+    long i = 0;
+    while (pred->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+       // DEBUG_PRINT("reclaimEntries");
+      CPU_RELAX;
+    }
+    SOFTWARE_BARRIER;
+    BundleEntry<NodeType> *curr = pred->next_;
+    if (pred == tail_ || curr == tail_) {
+      return;  // Nothing to do.
+    }
+
+    // If there are no active RQs then we can recycle all edges, but the
+    // newest (i.e., head). Similarly if the oldest active RQ is newer than
+    // the newest entry, we can reclaim all older entries.
+    if (ts == BUNDLE_NULL_TIMESTAMP || pred->ts_ <= ts) {
+      pred->next_ = tail_;
+    } else {
+      // Traverse from head and remove nodes that are lower than ts.
+      while (curr != tail_ && curr->ts_ > ts) {
+        pred = curr;
+        curr = curr->next_;
+      }
+      if (curr != tail_) {
+        // Curr points to the entry required by the oldest timestamp. This entry
+        // will become the last entry in the bundle.
+        pred = curr;
+        curr = curr->next_;
+        pred->next_ = tail_;
+      }
+    }
+    last_recycled = curr;
+    oldest_edge = pred->ts_;
+
+// Reclaim nodes.
+    assert(curr != head_ && pred->next_ == tail_);
+    while (curr != tail_) {
+      pred = curr;
+      curr = curr->next_;
+      pred->mark(ts);
+#ifndef BUNDLE_CLEANUP_NO_FREE
+      delete pred;
+#endif
+    }
+    if (curr != tail_) {
+      std::cout << curr << std::endl;
+      std::cout << dump(ts) << std::flush;
+      exit(1);
+    }
   }
 
-  void __attribute__((noinline)) dump(timestamp_t ts) {
+  string __attribute__((noinline)) dump(timestamp_t ts) {
     BundleEntry<NodeType> *curr = head_;
-    std::cout << "(ts=" << ts << ") : ";
-    while (curr != tail_) {
-      std::cout << "<" << curr->ts_ << "," << curr->ptr_ << "," << curr->next_
-                << ">";
+    std::stringstream ss;
+    ss << "(ts=" << ts << ") : ";
+    long i = 0;
+    while (curr != nullptr && curr != tail_) {
+      ss << "<" << curr->ts_ << "," << curr->ptr_ << "," << curr->next_ << ">"
+         << "-->";
       curr = curr->next_;
     }
-    std::cout << "(tail)<" << curr->ts_ << "," << curr->ptr_ << ","
-              << curr->next_ << ">";
-    std::cout << " [updates=" << updates << ", last_recycled=" << last_recycled
-              << ", oldest_edge=" << oldest_edge << "]" << std::endl;
+    if (curr == tail_) {
+      ss << "(tail)<" << curr->ts_ << "," << curr->ptr_ << ","
+         << (long)curr->next_ << ">";
+    } else {
+      ss << "(unexpected end)";
+    }
+    ss << " [updates=" << updates << ", last_recycled=" << last_recycled
+       << ", oldest_edge=" << oldest_edge << "]" << std::endl;
+    return ss.str();
   }
 };
 
@@ -184,6 +276,16 @@ class RQProvider {
       0,
   };
 
+  struct cleanup_args {
+    std::atomic<bool> *const stop;
+    DataStructure *const ds;
+    int tid;
+  };
+
+  pthread_t cleanup_thread_;
+  struct cleanup_args *cleanup_args_;
+  std::atomic<bool> stop_cleanup_;
+
  public:
   RQProvider(const int num_processes, DataStructure *ds, RecordManager *recmgr)
       : num_processes_(num_processes), ds_(ds), recmgr_(recmgr) {
@@ -192,8 +294,7 @@ class RQProvider {
       rq_thread_data_[i].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
       rq_thread_data_[i].data.rq_flag = false;
     }
-    curr_timestamp_ = BUNDLE_NULL_TIMESTAMP;
-    // TODO: Implement cleanup thread.
+    curr_timestamp_ = BUNDLE_MIN_TIMESTAMP;
   }
 
   ~RQProvider() { delete[] rq_thread_data_; }
@@ -214,21 +315,12 @@ class RQProvider {
       init_[tid] = !init_[tid];
   }
 
-  // For each address addr that is modified by rq_linearize_update_at_write
-  // or rq_linearize_update_at_cas, you must replace any initialization of
-  // addr with invocations of rq_write_addr.
-  template <typename T>
-  inline void write_addr(const int tid, T volatile *const addr, const T val) {
-    *addr = val;
+  void initBundle(int tid, Bundle<NodeType> *volatile *bundle, long k) {
+    *bundle = new Bundle<NodeType>(k);
+    SOFTWARE_BARRIER;
   }
 
-  // For each address addr that is modified by rq_linearize_update_at_write
-  // or rq_linearize_update_at_cas, you must replace any reads of addr with
-  // invocations of rq_read_addr
-  template <typename T>
-  inline T read_addr(const int tid, T volatile *const addr) {
-    return *addr;
-  }
+  void deinitBundle(int tid, Bundle<NodeType> *bundle) { delete bundle; }
 
   inline void physical_deletion_succeeded(const int tid,
                                           NodeType *const *const deletedNodes) {
@@ -238,7 +330,15 @@ class RQProvider {
     }
   }
 
- private:
+#ifdef BUNDLE_CLEANUP
+#define BUNDLE_INIT_CLEANUP(provider)                      \
+  const timestamp_t ts = provider->get_oldest_active_rq();
+#define BUNDLE_CLEAN_BUNDLE(bundle) bundle->reclaimEntries(ts)
+#else
+#define BUNDLE_INIT_CLEANUP(x)
+#define BUNDLE_CLEAN_BUNDLE(x)
+#endif
+
   // Creates a snapshot of the current state of active RQs.
   inline timestamp_t get_oldest_active_rq() {
     timestamp_t oldest_active = BUNDLE_MAX_TIMESTAMP;
@@ -260,10 +360,49 @@ class RQProvider {
     return oldest_active;
   }
 
+  void startCleanup() {
+    cleanup_args_ = new cleanup_args{&stop_cleanup_, ds_, num_processes_ - 1};
+    if (pthread_create(&cleanup_thread_, nullptr, cleanup_run,
+                       (void *)cleanup_args_)) {
+      cerr << "ERROR: could not create thread" << endl;
+      exit(-1);
+    }
+    std::stringstream ss;
+    ss << "Cleanup started: 0x" << std::hex << pthread_self() << std::endl;
+    std::cout << ss.str() << std::flush;
+  }
+
+  void stopCleanup() {
+    std::cout << "Stopping cleanup..." << std::endl << std::flush;
+    stop_cleanup_ = true;
+    if (pthread_join(cleanup_thread_, nullptr)) {
+      cerr << "ERROR: could not join thread" << endl;
+      exit(-1);
+    }
+    delete cleanup_args_;
+  }
+
+ private:
+  static void *cleanup_run(void *args) {
+    std::cout << "Staring cleanup" << std::endl << std::flush;
+    struct cleanup_args *c = (struct cleanup_args *)args;
+    long i = 0;
+    while (!(*(c->stop))) {
+      usleep(BUNDLE_CLEANUP_SLEEP);
+       // DEBUG_PRINT("cleanup_run");
+      c->ds->cleanup(c->tid);
+    }
+    // Final cleanup.
+    c->ds->cleanup(c->tid);
+    pthread_exit(nullptr);
+  }
+
   inline timestamp_t get_update_lin_time(int tid) {
+    assert(curr_timestamp_ >= 0);
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
     if ((rq_thread_data_[tid].data.local_timestamp %
-         BUNDLE_TIMESTAMP_RELAXATION - 1) == 0) {
+             BUNDLE_TIMESTAMP_RELAXATION -
+         1) == 0) {
       return curr_timestamp_.fetch_add(1);
     } else {
       ++rq_thread_data_[tid].data.local_timestamp;
@@ -287,7 +426,7 @@ class RQProvider {
   // Reset the range query linearization time so that updates may recycle an
   // edge we needed.
   inline void end_traversal(int tid) {
-    rq_thread_data_[tid].data.rq_lin_time = -1;
+    rq_thread_data_[tid].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
   }
 
   // Find and update the newest reference in the predecesor's bundle. If this
@@ -297,8 +436,8 @@ class RQProvider {
   inline T linearize_update_at_write(const int tid, T volatile *const lin_addr,
                                      const T &lin_newval,
                                      Bundle<NodeType> *const *const bundles,
-                                     NodeType *const *const ptrs) {
-    // BUSY_TIMESTAMP blocks all RQs that might see the update, ensuring that
+                                     NodeType *const *const ptrs, op o) {
+    // PENDING_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
     int i = 0;
@@ -308,7 +447,7 @@ class RQProvider {
     };
     while (curr_bundle != nullptr) {
       entries[i] =
-          new BundleEntry<NodeType>(BUNDLE_BUSY_TIMESTAMP, ptrs[i], nullptr);
+          new BundleEntry<NodeType>(BUNDLE_PENDING_TIMESTAMP, ptrs[i], nullptr, o);
       curr_bundle->insertAtHead(entries[i]);
       curr_bundle = bundles[++i];
     }
@@ -325,6 +464,7 @@ class RQProvider {
     BundleEntry<NodeType> *curr_entry = entries[i];
     while (curr_entry != nullptr) {
       curr_entry->set_ts(lin_time);
+      curr_entry->validate();
       curr_entry = entries[++i];
     }
   }

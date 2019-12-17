@@ -62,7 +62,8 @@ typedef reclaimer_debra<> RECLAIMER_TYPE;
 #define RQ_UNSAFE
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_SNAPCOLLECTOR)
 #define RQ_SNAPCOLLECTOR
-#elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE)
+#elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE) || \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
 #define RQ_BUNDLE
 #endif
 
@@ -136,15 +137,30 @@ typedef skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
 
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE)
-#define KEY_PRECEEDING(key) (key - 1)
+#define BUNDLE_MAX_BUNDLES_UPDATED 2
 #include "bundle_skiplist_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
-typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE> RECORD_MANAGER_TYPE;
+typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
+    RECORD_MANAGER_TYPE;
 typedef bundle_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define INDEX_CONSTRUCTOR_ARGS                   \
   g_thread_cnt, numeric_limits<KEY_TYPE>::min(), \
       numeric_limits<KEY_TYPE>::max() - 1, __NO_VALUE, rngs
+#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
+#define ISLEAF(x) false
+#define VALUES_ARRAY_TYPE VALUE_TYPE *
+
+#elif (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
+#define BUNDLE_MAX_BUNDLES_UPDATED 4
+#include "bundle_citrus_impl.h"
+typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
+typedef bool DESCRIPTOR_TYPE;  // no descriptor
+typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
+    RECORD_MANAGER_TYPE;
+typedef bundle_citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
+#define INDEX_CONSTRUCTOR_ARGS \
+  numeric_limits<KEY_TYPE>::max(), __NO_VALUE, g_thread_cnt
 #define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
 #define ISLEAF(x) false
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
@@ -281,6 +297,27 @@ class index_with_rq : public index_base {
                 int thd_id = 0) {
     *item = (VALUE_TYPE)index->find(tid, key).first;
     INCREMENT_NUM_READS(tid);
+    return RCOK;
+  }
+  RC index_remove(KEY_TYPE key, int part_id = -1) {
+#if (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE) ||     \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_LOCKFREE) ||   \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_RWLOCK) ||     \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_HTM_RWLOCK) || \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE) ||     \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_RLU) 
+    const void *oldVal = (VALUE_TYPE)index->erase(tid, key).first;
+#else
+    const void *oldVal = index->erase(tid, key);
+#endif
+#ifndef NDEBUG
+    if (oldVal == index->NO_VALUE) {
+      cout << "index_remove failed to remove a value." << endl;
+      cout << "index name=" << index_name << endl;
+      cout << "key=" << key << endl;
+    }
+    assert(oldVal != index->NO_VALUE);
+#endif
     return RCOK;
   }
   // finds all keys in the set in [low, high],

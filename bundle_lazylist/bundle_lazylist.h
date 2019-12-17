@@ -1,8 +1,8 @@
 #ifndef LAZYLIST_H
 #define LAZYLIST_H
 
-#include <unordered_set>
 #include <stack>
+#include <unordered_set>
 
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
 // define BEFORE including rq_provider.h
@@ -53,6 +53,10 @@ class bundle_lazylist {
   V erase(const int tid, const K& key);
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
+  void cleanup(int tid);
+  void startCleanup() {rqProvider->startCleanup();}
+  void stopCleanup() {rqProvider->stopCleanup();}
+  bool validateBundles(int tid);
 
   /**
    * This function must be called once by each thread that will
@@ -114,7 +118,8 @@ class bundle_lazylist {
   node_t<K, V>* debug_getEntryPoint() { return head; }
 
   string getBundleStatsString() {
-    unsigned int max = -1;
+    unsigned int max = 0;
+    nodeptr max_node = nullptr;
     long num_nodes = 0;
     long total = 0;
     stack<nodeptr> s;
@@ -128,10 +133,10 @@ class bundle_lazylist {
       auto result = unique.insert(curr);
       if (result.second) {
         // If this is an unseen node, update stats.
-        ++num_nodes;
         int size = curr->rqbundle->getSize();
         if (size > max) {
           max = size;
+          max_node = curr;
         }
         total += size;
 
@@ -139,18 +144,18 @@ class bundle_lazylist {
         // node before.
         BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
         while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
-          if (bundle_entry->ptr_ != nullptr) {
-            s.push((nodeptr)bundle_entry->ptr_);
-          }
+          s.push((nodeptr)bundle_entry->ptr_);
           bundle_entry = bundle_entry->next_;
         }
       }
     }
 
     stringstream ss;
-    ss << "total reachable nodes         : " << num_nodes << endl;
-    ss << "average bundle size           : " << (total / (double)num_nodes)
+    ss << "total reachable nodes         : " << unique.size() << endl;
+    ss << "average bundle size           : " << (total / (double)unique.size())
        << endl;
+    ss << "max bundle size               : " << max << endl;
+    ss << max_node->rqbundle->dump(0) <<endl;
     return ss.str();
   }
 };

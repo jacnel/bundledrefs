@@ -7,14 +7,16 @@ source ./supported.inc
 
 # Overwrite datastructures and rqtechniques
 datastructures="lazylist skiplistlock citrus"
-rqtechniques="lockfree rwlock bundle"
+rqtechniques="bundle lockfree rwlock"
 
 ksizes="10000 100000 1000000"
 
 echo "Preparing experiment 0: UPDATE/RQ ONLY WORKLOAD WITH VARYING RQ SIZES"
 count=0
 rqsizes="1 10 50 100 250 500"
-urates="0 1 5 10 25 40 45 49 50"
+urates="25"
+# rqsizes="50"
+# urates="50"
 nrq=0
 for rqsize in $rqsizes; do
   for u in $urates; do
@@ -51,22 +53,22 @@ for e in $erates; do
   for k in $ksizes; do
     for ds in $datastructures; do
       for alg in $rqtechniques; do
-          nworks="0"
-          if [ "$threadincrement" -ne "1" ]; then nworks="$nworks 1"; fi
-          for ((x = $threadincrement; x < ${maxthreads}; x += $threadincrement)); do nworks="$nworks $x"; done
-          if [ "$((${x} - ${threadincrement}))" -ne "${maxthreads}" ]; then nworks="$nworks $maxthreads"; fi
-          for nwork in $nworks; do
-            if [ ${nwork} -eq "0" ] && [ ${nrq} -eq "0" ]; then continue; fi
-            check_ds_technique $ds $alg
-            if [ "$?" -ne 0 ]; then continue; fi
-            check_ds_size $ds $k
-            if [ "$?" -ne 0 ]; then continue; fi
-            rq=$((100 - ${e}))
-            u=$(echo "scale=4;${e} / 2.0" | bc)
-            u=$(echo "scale=4;${u} / 2.0" | bc) # Runscript uses same for inserts and deletes, so divide by two.
-            echo $u $rq $rqsize $k $nrq $nwork $ds $alg >>experiment_list.txt
-            count=$(( ${count} + 1 ))
-          done
+        nworks="0"
+        if [ "$threadincrement" -ne "1" ]; then nworks="$nworks 1"; fi
+        for ((x = $threadincrement; x < ${maxthreads}; x += $threadincrement)); do nworks="$nworks $x"; done
+        if [ "$((${x} - ${threadincrement}))" -ne "${maxthreads}" ]; then nworks="$nworks $maxthreads"; fi
+        for nwork in $nworks; do
+          if [ ${nwork} -eq "0" ] && [ ${nrq} -eq "0" ]; then continue; fi
+          check_ds_technique $ds $alg
+          if [ "$?" -ne 0 ]; then continue; fi
+          check_ds_size $ds $k
+          if [ "$?" -ne 0 ]; then continue; fi
+          rq=$((100 - ${e}))
+          u=$(echo "scale=4;${e} / 2.0" | bc)
+          u=$(echo "scale=4;${u} / 2.0" | bc) # Runscript uses same for inserts and deletes, so divide by two.
+          echo $u $rq $rqsize $k $nrq $nwork $ds $alg >>experiment_list.txt
+          count=$((${count} + 1))
+        done
       done
     done
   done
@@ -166,30 +168,28 @@ echo "Generated ${count} trials for experiment 4."
 
 # echo "Preparing experiment 5: UPDATE/RQ ONLY WORKLOAD WITH VARYING RQ SIZES"
 # count=0
-# rqsizes="1 10 50 100 250 500"
-# urates="0 1 5 10 25 40 45 49 50"
-# nrq=0
-# for rqsize in $rqsizes; do
-#   for u in $urates; do
-#     for k in $ksizes; do
-#       for ds in $datastructures; do
-#         for alg in $rqtechniques; do
-#           for nrq in $nrqs;
-#               do remaining_threads="$(expr $maxthreads - $nrq)"
-#             nworks="0"
-#             if [ "$threadincrement" -ne "1" ]; then nworks="$nworks 1"; fi
-#             for ((x = $threadincrement; x < ${remaining_threads}; x += $threadincrement)); do nworks="$nworks $x"; done
-#             if [ "$remaining_threads" -ne "0" ]; then nworks="$nworks $remaining_threads"; fi
-#             for nwork in $nworks; do
-#               if [ ${nwork} -eq "0" ] && [ ${nrq} -eq "0" ]; then continue; fi
-#               check_ds_technique $ds $alg
-#               if [ "$?" -ne 0 ]; then continue; fi
-#               check_ds_size $ds $k
-#               if [ "$?" -ne 0 ]; then continue; fi
-#               rq=$((100 - (2 * ${u})))
-#               echo $u $rq $rqsize $k $nrq $nwork $ds $alg >>experiment_list.txt
-#               count=$(( ${count} + 1 ))
-#             done
+# rqsize=100
+# rq=0
+# nrqs="1"
+# urates="25 40 45 49 50"
+# for u in $urates; do
+#   for k in $ksizes; do
+#     for ds in $datastructures; do
+#       for alg in $rqtechniques; do
+#         for nrq in $nrqs; do
+#           remaining_threads="$(expr $maxthreads - $nrq)"
+#           # nworks="0"
+#           # if [ "$threadincrement" -ne "1" ]; then nworks="$nworks 1"; fi
+#           for ((x = $threadincrement; x < ${remaining_threads}; x += $threadincrement)); do nworks="$nworks $x"; done
+#           if [ "$remaining_threads" -ne "0" ]; then nworks="$nworks $remaining_threads"; fi
+#           for nwork in $nworks; do
+#             if [ ${nwork} -eq "0" ] && [ ${nrq} -eq "0" ]; then continue; fi
+#             check_ds_technique $ds $alg
+#             if [ "$?" -ne 0 ]; then continue; fi
+#             check_ds_size $ds $k
+#             if [ "$?" -ne 0 ]; then continue; fi
+#             echo $u $rq $rqsize $k $nrq $nwork $ds $alg >>experiment_list.txt
+#             count=$((${count} + 1))
 #           done
 #         done
 #       done

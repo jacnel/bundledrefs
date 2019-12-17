@@ -1,10 +1,13 @@
 .DS_STORE
 .vs*
-microbench/data*
-microbench/graphs*
+microbench/data/*
+microbench/data.old/*
+microbench/graphs/*
 microbench/*.out
 microbench/warnings.txt
-microbench/experiment_list.txt*
 microbench/plot_config.py
 macrobench/bin/*
-macrobench/data*
+macrobench/data/*
+microbench/experiment_list.txt
+microbench/__pycache__/*
+microbench/data/summary.txt

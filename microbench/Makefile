@@ -7,7 +7,7 @@ FLAGS += -g
 #FLAGS += -DNDEBUG
 FLAGS += $(PLAF)
 FLAGS += -DUSE_GSTATS
-FLAGS += -DNO_FREE
+# FLAGS += -DNO_FREE
 #FLAGS += -DUSE_STL_HASHLIST
 FLAGS += -DUSE_SIMPLIFIED_HASHLIST
 #FLAGS += -DRAPID_RECLAMATION
@@ -31,10 +31,15 @@ FLAGS += -DMEMORY_STATS=if\(1\) -DMEMORY_STATS2=if\(1\)
 FLAGS += -DINSERT_FUNC=insertIfAbsent
 #FLAGS += -DUSE_PAPI
 # FLAGS += -DBUNDLE_TIMESTAMP_RELAXATION=1000000
+# FLAGS += -DUSE_TRACE
 
-#FLAGS += -DDEBRA_DISABLE_READONLY_OPT
+# FLAGS += -DDEBRA_DISABLE_READONLY_OPT
 #FLAGS += -DEERPRCU_DISABLE_RDTSC_TTAS
-#FLAGS += -DSKIPLIST_DEBUGGING_FLATTEN_MAX_LEVEL
+# FLAGS += -DSKIPLIST_DEBUGGING_FLATTEN_MAX_LEVEL
+
+# FLAGS += -DBUNDLE_CLEANUP_NO_FREE
+FLAGS += -DBUNDLE_CLEANUP
+FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 
 LDFLAGS = -L../lib
 LDFLAGS += -I../
@@ -137,7 +142,7 @@ bst: bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe
 bst.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 bst.rq_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(;ilesuffix).out $(xargs) -DBST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 bst.rq_htm_rwlock:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 bst.rq_unsafe:
