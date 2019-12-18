@@ -2,7 +2,7 @@ include ../config.mk
 PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_powerof2) -DCPU_FREQ_GHZ=$(cpu_freq_ghz) -DCPU_FREQ=$(cpu_freq_ghz)
 
 GPP = g++
-FLAGS = -std=c++11 -mcx16 -O0
+FLAGS = -std=c++11 -mcx16 -O3
 FLAGS += -g
 #FLAGS += -DNDEBUG
 FLAGS += $(PLAF)
