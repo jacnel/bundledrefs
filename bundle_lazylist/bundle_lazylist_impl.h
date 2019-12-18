@@ -332,17 +332,17 @@ template <typename K, typename V, class RecManager>
 bool bundle_lazylist<K, V, RecManager>::validateBundles(int tid) {
   nodeptr curr = head;
   bool valid = true;
-  while (curr->key < KEY_MAX) {
-    if (curr->rqbundle->getHead()->ptr_ != curr->next) {
-      std::cout << "Pointer mismatch! [key=" << curr->next->key
-                << ",marked=" << curr->next->marked << "] " << curr->next
-                << " vs. [key=" << curr->rqbundle->getHead()->ptr_->key
-                << ",marked=" << curr->rqbundle->getHead()->ptr_->marked << "] "
-                << curr->rqbundle->dump(0) << std::flush;
-      valid = false;
-    }
-    curr = curr->next;
-  }
+  // while (curr->key < KEY_MAX) {
+  //   if (curr->rqbundle->getHead()->ptr_ != curr->next) {
+  //     std::cout << "Pointer mismatch! [key=" << curr->next->key
+  //               << ",marked=" << curr->next->marked << "] " << curr->next
+  //               << " vs. [key=" << curr->rqbundle->getHead()->ptr_->key
+  //               << ",marked=" << curr->rqbundle->getHead()->ptr_->marked << "] "
+  //               << curr->rqbundle->dump(0) << std::flush;
+  //     valid = false;
+  //   }
+  //   curr = curr->next;
+  // }
   return valid;
 }
 

@@ -40,6 +40,7 @@ FLAGS += -DINSERT_FUNC=insertIfAbsent
 # FLAGS += -DBUNDLE_CLEANUP_NO_FREE
 FLAGS += -DBUNDLE_CLEANUP
 FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
+FLAGS += -DBUNDLE_BUNDLE_TYPE=BUNDLE_CIRCULAR_BUNDLE
 
 LDFLAGS = -L../lib
 LDFLAGS += -I../
@@ -170,7 +171,7 @@ citrus.rq_rlu:
 bundle: lazylist.rq_bundle skiplistlock.rq_bundle citrus.rq_bundle
 lazylist.rq_bundle:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplistlock.rq_bundle:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-citrus.rq_bundle:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# skiplistlock.rq_bundle:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# citrus.rq_bundle:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
