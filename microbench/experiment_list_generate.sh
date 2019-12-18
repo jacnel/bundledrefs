@@ -6,8 +6,8 @@ rm -f experiment_list.txt >/dev/null
 source ./supported.inc
 
 # Overwrite datastructures and rqtechniques
-datastructures="lazylist skiplistlock citrus"
-rqtechniques="bundle lockfree rwlock"
+datastructures="lazylist" # skiplistlock citrus"
+rqtechniques="bundle" # lockfree rwlock"
 
 ksizes="10000 100000 1000000"
 

@@ -39,12 +39,13 @@ class Bundle : public BundleInterface<NodeType> {
   };
 
   // Entry array and metadata.
+  struct BundleEntry *volatile entries_;  // Bundle entry array
+  volatile char pad0[PREFETCH_SIZE_BYTES];
   std::atomic<int> state_;
   int base_;                       // Index of oldest entry.
   int curr_;                       // Index of newest entry.
   int capacity_;                   // Maximum number of entries.
   std::atomic<int> rqs_;           // Number of RQs using bundle.
-  struct BundleEntry *volatile entries_;  // Bundle entry array
 
   // Doubles the capacity of the bundle. Only called when a new entry is added,
   // meaning no updates will be lost although some cleanup may be missed.
@@ -94,7 +95,7 @@ class Bundle : public BundleInterface<NodeType> {
   explicit Bundle()
       : state_(NORMAL_STATE),
         base_(0),
-        curr_(-1),
+        curr_(0),
         capacity_(BUNDLE_INIT_CAPACITY) {
     entries_ = new BundleEntry[BUNDLE_INIT_CAPACITY];
   }
@@ -132,10 +133,11 @@ class Bundle : public BundleInterface<NodeType> {
     for (; i >= end; --i) {
       if (entries_[i % capacity_].ts_ <= ts) {
         ptr = entries_[i % capacity_].ptr_;
+        break;
       }
     }
 
-    if (rqs_.fetch_sub(1) == 0) {
+    if (rqs_.fetch_sub(1) == 1) {
       state_.fetch_and(~RQ_STATE);
     }
     return ptr;
@@ -179,6 +181,8 @@ class Bundle : public BundleInterface<NodeType> {
         }
       }
     }
+
+    state_.fetch_and(~RESIZE_STATE);
   }
 
   inline void prepare(NodeType *const ptr) {
@@ -196,6 +200,7 @@ class Bundle : public BundleInterface<NodeType> {
         }
         SOFTWARE_BARRIER;
         entries_[(curr_ + 1) % capacity_].ptr_ = ptr;
+        break;
       }
     }
   }
@@ -420,7 +425,7 @@ class RQProvider {
     // PENDING_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
-    // int i = 0;
+    int i = 0;
     Bundle<NodeType> *curr_bundle = bundles[0];
     NodeType *curr_ptr = ptrs[0];
     // BundleEntry<NodeType> *entries[BUNDLE_MAX_BUNDLES_UPDATED + 1] = {
@@ -432,8 +437,9 @@ class RQProvider {
       //     nullptr, o);
       // curr_bundle->insertAtHead(entries[i]);
       curr_bundle->prepare(curr_ptr);
-      curr_bundle++;
-      curr_ptr++;
+      ++i;
+      curr_bundle = bundles[i];
+      curr_ptr = ptrs[i];
     }
     SOFTWARE_BARRIER;
 
@@ -451,10 +457,12 @@ class RQProvider {
     // curr_entry->validate();
     // curr_entry = entries[++i];
     // }
+    i = 0;
     curr_bundle = bundles[0];
     while (curr_bundle != nullptr) {
       curr_bundle->finalize(lin_time);
-      curr_bundle++;
+      ++i;
+      curr_bundle = bundles[i];
     }
   }
 };
