@@ -6,12 +6,12 @@ rm -f experiment_list.txt >/dev/null
 source ./supported.inc
 
 # Overwrite datastructures and rqtechniques
-datastructures="lazylist" # skiplistlock citrus"
-rqtechniques="bundle" # lockfree rwlock"
+datastructures="lazylist skiplistlock citrus"
+rqtechniques="bundle lockfree rwlock"
 
 ksizes="10000 100000 1000000"
 
-echo "Preparing experiment 0: UPDATE/RQ ONLY WORKLOAD WITH VARYING RQ SIZES"
+echo "Preparing experiment 0: UPDATE/RQ (50%/50%) WORKLOAD WITH VARYING RQ SIZES"
 count=0
 rqsizes="1 10 50 100 250 500"
 urates="25"
@@ -44,9 +44,9 @@ for rqsize in $rqsizes; do
 done
 echo "Generated ${count} trials for experiment 0."
 
-echo "Preparing experiment 1: MIXED WORKLOAD (1:1 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 100"
+echo "Preparing experiment 1: MIXED WORKLOAD (1:1 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 50"
 count=0
-rqsize=100
+rqsize=50
 nrq=0
 erates="0 2 10 20 50 80 90 98 100"
 for e in $erates; do
@@ -75,9 +75,9 @@ for e in $erates; do
 done
 echo "Generated ${count} trials for experiment 1."
 
-echo "Preparing experiment 2: MIXED WORKLOAD (9:1 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 100"
+echo "Preparing experiment 2: MIXED WORKLOAD (9:1 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 50"
 count=0
-rqsize=100
+rqsize=50
 nrq=0
 erates="0 2 10 20 50 80 90 98 100"
 for e in $erates; do
@@ -106,9 +106,9 @@ for e in $erates; do
 done
 echo "Generated ${count} trials for expeirment 2."
 
-echo "Preparing experiment 3: MIXED WORKLOAD (1:9 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 100"
+echo "Preparing experiment 3: MIXED WORKLOAD (1:9 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 50"
 count=0
-rqsize=100
+rqsize=50
 nrq=0
 erates="0 2 10 20 50 80 90 98 100"
 for e in $erates; do
@@ -137,9 +137,9 @@ for e in $erates; do
 done
 echo "Generated ${count} trials for experiment 3."
 
-echo "Preparing experiment 4: CONTAINS ONLY WORKLOAD WITH RQ SIZE OF 100"
+echo "Preparing experiment 4: CONTAINS ONLY WORKLOAD WITH RQ SIZE OF 50"
 count=0
-rqsize=100
+rqsize=50
 nrq=0
 crates="0 2 10 20 50 80 90 98 100"
 for c in $crates; do

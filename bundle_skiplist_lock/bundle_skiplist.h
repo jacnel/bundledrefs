@@ -53,7 +53,8 @@ class node_t {
   ~node_t() { delete rqbundle; }
 
   bool validate() {
-    return p_next[0] == rqbundle->getHead()->ptr_;
+    timestamp_t ts;
+    return p_next[0] == rqbundle->first(ts);
   }
 
   template <typename RQProvider>
@@ -198,7 +199,7 @@ class bundle_skiplist {
   bool validateBundles(int tid);
 
   string getBundleStatsString() {
-    std::cout << "getBundleStatsString" << std::endl << std::flush;
+    cleanup(0);
     unsigned int max = 0;
     nodeptr max_node = nullptr;
     long total = 0;
@@ -212,30 +213,18 @@ class bundle_skiplist {
       curr = s.top();
       s.pop();
       auto result = unique.insert(curr);
-      if (result.second) {
-        if (curr->key < KEY_MAX) {
-          int size = curr->rqbundle->getSize();
+      if (result.second && curr->key != KEY_MAX) {
+          int size;
+          std::pair<nodeptr, timestamp_t> *entries = curr->rqbundle->get(size);
+          for (int i = 0; i < size; ++i) {
+            s.push(entries[i].first);
+          }
+
           if (size > max) {
             max = size;
             max_node = curr;
           }
           total += size;
-
-          // Add all nodes in the bundle to the s, if we haven't seen this
-          // node before.
-          BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
-          BundleEntry<node_t<K, V>>* prev; 
-          while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
-            if (bundle_entry->ptr_ != nullptr) {
-              s.push((nodeptr)bundle_entry->ptr_);
-            }
-            prev = bundle_entry;
-            bundle_entry = bundle_entry->next_;
-            if (bundle_entry == nullptr) {
-              std::cout << curr->rqbundle->dump(0) << std::flush;
-            }
-          }
-        }
       }
       prev = curr;
     }

@@ -30,7 +30,6 @@ FLAGS += -DMEMORY_STATS=if\(1\) -DMEMORY_STATS2=if\(1\)
 #FLAGS += -DMEMORY_STATS=if\(0\) -DMEMORY_STATS2=if\(0\)
 FLAGS += -DINSERT_FUNC=insertIfAbsent
 #FLAGS += -DUSE_PAPI
-# FLAGS += -DBUNDLE_TIMESTAMP_RELAXATION=1000000
 # FLAGS += -DUSE_TRACE
 
 # FLAGS += -DDEBRA_DISABLE_READONLY_OPT
@@ -38,9 +37,19 @@ FLAGS += -DINSERT_FUNC=insertIfAbsent
 # FLAGS += -DSKIPLIST_DEBUGGING_FLATTEN_MAX_LEVEL
 
 # FLAGS += -DBUNDLE_CLEANUP_NO_FREE
-# FLAGS += -DBUNDLE_CLEANUP
+# FLAGS += -DBUNDLE_DEBUG
 FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
-FLAGS += -DBUNDLE_BUNDLE_TYPE=BUNDLE_CIRCULAR_BUNDLE
+
+# Bundle configuration macros
+# --------------------------
+# FLAGS += -DBUNDLE_TIMESTAMP_RELAXATION=1000000
+FLAGS += -DBUNDLE_CLEANUP_SLEEP=100000
+# Definitions for bundle type.
+FLAGS += -DBUNDLE_CIRCULAR_BUNDLE
+# FLAGS += -DBUNDLE_LINKED_BUNDLE
+# Definitions for cleanup.
+# FLAGS += -DBUNDLE_CLEANUP_BACKGROUND
+FLAGS += -DBUNDLE_CLEANUP_UPDATE
 
 LDFLAGS = -L../lib
 LDFLAGS += -I../
@@ -171,7 +180,7 @@ citrus.rq_rlu:
 bundle: lazylist.rq_bundle skiplistlock.rq_bundle citrus.rq_bundle
 lazylist.rq_bundle:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-# skiplistlock.rq_bundle:
-# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-# citrus.rq_bundle:
-# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+skiplistlock.rq_bundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+citrus.rq_bundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)

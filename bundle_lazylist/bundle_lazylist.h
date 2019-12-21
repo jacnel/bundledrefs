@@ -54,8 +54,8 @@ class bundle_lazylist {
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
   void cleanup(int tid);
-  void startCleanup() {rqProvider->startCleanup();}
-  void stopCleanup() {rqProvider->stopCleanup();}
+  void startCleanup() { rqProvider->startCleanup(); }
+  void stopCleanup() { rqProvider->stopCleanup(); }
   bool validateBundles(int tid);
 
   /**
@@ -118,44 +118,44 @@ class bundle_lazylist {
   node_t<K, V>* debug_getEntryPoint() { return head; }
 
   string getBundleStatsString() {
-    // unsigned int max = 0;
-    // nodeptr max_node = nullptr;
-    // long num_nodes = 0;
-    // long total = 0;
-    // stack<nodeptr> s;
-    // unordered_set<nodeptr> unique;
-    // nodeptr curr = head;
-    // s.push(curr);
-    // while (!s.empty()) {
-    //   // Try to add the current node to set of unique nodes.
-    //   curr = s.top();
-    //   s.pop();
-    //   auto result = unique.insert(curr);
-    //   if (result.second) {
-    //     // If this is an unseen node, update stats.
-    //     int size = curr->rqbundle->getSize();
-    //     if (size > max) {
-    //       max = size;
-    //       max_node = curr;
-    //     }
-    //     total += size;
+    cleanup(0);
+    unsigned int max = 0;
+    nodeptr max_node = nullptr;
+    long num_nodes = 0;
+    long total = 0;
+    stack<nodeptr> s;
+    unordered_set<nodeptr> unique;
+    nodeptr curr = head;
+    s.push(curr);
+    while (!s.empty()) {
+      // Try to add the current node to set of unique nodes.
+      curr = s.top();
+      s.pop();
+      auto result = unique.insert(curr);
+      if (result.second && curr->key != KEY_MAX) {
+        // If this is an unseen node, add bundle entries to stack and update
+        // bundle stats.
+        int size;
+        std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle->get(size);
+        assert(size == 1);
+        for (int i = 0; i < size; ++i) {
+          s.push(entries[i].first);
+        }
 
-    //     // Add all nodes in the bundle to s, if we haven't seen this
-    //     // node before.
-    //     BundleEntry<node_t<K, V>>* bundle_entry = curr->rqbundle->getHead();
-    //     while (bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
-    //       s.push((nodeptr)bundle_entry->ptr_);
-    //       bundle_entry = bundle_entry->next_;
-    //     }
-    //   }
-    // }
+        if (size > max) {
+          max = size;
+          max_node = curr;
+        }
+        total += size;
+      }
+    }
 
     stringstream ss;
-    // ss << "total reachable nodes         : " << unique.size() << endl;
-    // ss << "average bundle size           : " << (total / (double)unique.size())
-    //    << endl;
-    // ss << "max bundle size               : " << max << endl;
-    // ss << max_node->rqbundle->dump(0) <<endl;
+    ss << "total reachable nodes         : " << unique.size() << endl;
+    ss << "average bundle size           : " << (total / (double)unique.size())
+       << endl;
+    ss << "max bundle size               : " << max << endl;
+    ss << max_node->rqbundle->dump(0) << endl;
     return ss.str();
   }
 };

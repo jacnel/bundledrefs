@@ -334,12 +334,14 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       rqProvider->linearize_update_at_write(
           tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs, INSERT);
       if (!p_preds[0]->validate()) {
-        std::cout << "Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
-                  << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-                  << p_preds[0]->p_next[0]
-                  << " vs. [key=" << p_preds[0]->rqbundle->getHead()->ptr_->key
-                  << ",marked=" << p_preds[0]->rqbundle->getHead()->ptr_->marked
-                  << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
+        // std::cout << "Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
+        //           << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+        //           << p_preds[0]->p_next[0]
+        //           << " vs. [key=" <<
+        //           p_preds[0]->rqbundle->getHead()->ptr_->key
+        //           << ",marked=" <<
+        //           p_preds[0]->rqbundle->getHead()->ptr_->marked
+        //           << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
         exit(1);
       }
 #ifdef __HANDLE_STATS
@@ -428,13 +430,15 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         nodeptr deletedNodes[] = {p_victim, nullptr};
         rqProvider->physical_deletion_succeeded(tid, deletedNodes);
         if (!p_preds[0]->validate()) {
-          std::cout << "Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
-                    << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-                    << p_preds[0]->p_next[0] << " vs. [key="
-                    << p_preds[0]->rqbundle->getHead()->ptr_->key << ",marked="
-                    << p_preds[0]->rqbundle->getHead()->ptr_->marked << "] "
-                    << p_preds[0]->rqbundle->getHead()->ptr_ << " "
-                    << p_preds[0]->rqbundle->dump(0) << std::flush;
+          // std::cout << "Pointer mismatch! [key=" <<
+          // p_preds[0]->p_next[0]->key
+          //           << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+          //           << p_preds[0]->p_next[0] << " vs. [key="
+          //           << p_preds[0]->rqbundle->getHead()->ptr_->key <<
+          //           ",marked="
+          //           << p_preds[0]->rqbundle->getHead()->ptr_->marked << "] "
+          //           << p_preds[0]->rqbundle->getHead()->ptr_ << " "
+          //           << p_preds[0]->rqbundle->dump(0) << std::flush;
           exit(1);
         }
         ret = p_victim->val;
@@ -520,26 +524,28 @@ void bundle_skiplist<K, V, RecManager>::cleanup(int tid) {
 
 template <typename K, typename V, class RecManager>
 bool bundle_skiplist<K, V, RecManager>::validateBundles(int tid) {
-  std::cout << "Checking if clean..." << std::endl;
   bool valid = true;
+#ifdef BUNDLE_DEBUG
   for (nodeptr curr = p_head->p_next[0]; curr->key != KEY_MAX;
-       curr = curr->rqbundle->getHead()->ptr_) {
-    if (curr->rqbundle->getHead()->ptr_ != curr->p_next[0]) {
+       curr = curr->p_next[0]) {
+    timestamp_t ts;
+    nodeptr ptr = curr->rqbundle->first(ts);
+    if (ptr != curr->p_next[0]) {
       std::cout << "Pointer mismatch! [key=" << curr->p_next[0]->key
                 << ",marked=" << curr->p_next[0]->marked << "] "
-                << curr->p_next[0]
-                << " vs. [key=" << curr->rqbundle->getHead()->ptr_->key
-                << ",marked=" << curr->rqbundle->getHead()->ptr_->marked << "] "
-                << curr->rqbundle->dump(0) << std::flush;
+                << curr->p_next[0] << " vs. [key=" << ptr->key
+                << ",marked=" << ptr->marked << "] " << curr->rqbundle->dump(0)
+                << std::flush;
       valid = false;
     }
 #ifdef BUNDLE_CLEANUP
-    if (curr->rqbundle->getSize() > 1) {
+    if (curr->rqbundle->size() > 1) {
       std::cout << curr->rqbundle->dump(0) << std::flush;
       return false;
     }
 #endif
   }
+#endif
   return valid;
 }
 

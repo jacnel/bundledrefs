@@ -36,7 +36,10 @@ class node_t {
                // at least as large as a machine word)
   Bundle<node_t>* volatile rqbundle;
 
-  ~node_t() { delete rqbundle; }
+  ~node_t() {
+    delete rqbundle;
+    rqbundle = nullptr;
+  }
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
@@ -321,9 +324,9 @@ void bundle_lazylist<K, V, RecManager>::cleanup(int tid) {
     ;
   BUNDLE_CLEAN_BUNDLE(head->rqbundle);
   for (nodeptr curr = head->next; curr->key != KEY_MAX; curr = curr->next) {
-    if (!curr->marked) {
+    // if (!curr->marked) {
       BUNDLE_CLEAN_BUNDLE(curr->rqbundle);
-    }
+    // }
   }
   recordmgr->enterQuiescentState(tid);
 }
@@ -331,18 +334,22 @@ void bundle_lazylist<K, V, RecManager>::cleanup(int tid) {
 template <typename K, typename V, class RecManager>
 bool bundle_lazylist<K, V, RecManager>::validateBundles(int tid) {
   nodeptr curr = head;
+  nodeptr temp;
+  timestamp_t ts;
   bool valid = true;
-  // while (curr->key < KEY_MAX) {
-  //   if (curr->rqbundle->getHead()->ptr_ != curr->next) {
-  //     std::cout << "Pointer mismatch! [key=" << curr->next->key
-  //               << ",marked=" << curr->next->marked << "] " << curr->next
-  //               << " vs. [key=" << curr->rqbundle->getHead()->ptr_->key
-  //               << ",marked=" << curr->rqbundle->getHead()->ptr_->marked << "] "
-  //               << curr->rqbundle->dump(0) << std::flush;
-  //     valid = false;
-  //   }
-  //   curr = curr->next;
-  // }
+#ifdef BUNDLE_DEBUG
+  while (curr->key < KEY_MAX) {
+    temp = curr->rqbundle->first(ts);
+    if (temp != curr->next) {
+      std::cout << "Pointer mismatch! [key=" << curr->next->key
+                << ",marked=" << curr->next->marked << "] " << curr->next
+                << " vs. [key=" << temp->key << ",marked=" << temp->marked
+                << "] " << curr->rqbundle->dump(0) << std::flush;
+      valid = false;
+    }
+    curr = curr->next;
+  }
+#endif
   return valid;
 }
 

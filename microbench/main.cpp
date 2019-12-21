@@ -634,7 +634,7 @@ void trial() {
   SOFTWARE_BARRIER;
 
 #ifdef RQ_BUNDLE
-#ifdef BUNDLE_CLEANUP
+#ifdef BUNDLE_CLEANUP_BACKGROUND
   ds->startCleanup();
 #endif
 #endif
@@ -705,7 +705,7 @@ void trial() {
   }
 
 #ifdef RQ_BUNDLE
-#ifdef BUNDLE_CLEANUP
+#ifdef BUNDLE_CLEANUP_BACKGROUND
   ds->stopCleanup();
 #endif
   if (ds->validateBundles(0)) {

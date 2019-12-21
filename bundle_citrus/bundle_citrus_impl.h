@@ -46,8 +46,8 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
   }
   nnode->key = key;
   nnode->marked = false;
-  nnode->child[0] = (nodeptr)NULL;
-  nnode->child[1] = (nodeptr)NULL;
+  nnode->child[0] = (nodeptr) nullptr;
+  nnode->child[1] = (nodeptr) nullptr;
   nnode->tag[0] = 0;
   nnode->tag[1] = 0;
   nnode->value = value;
@@ -57,6 +57,7 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
   nnode->lock = false;
   rqProvider->initBundle(tid, &nnode->rqbundle[0], key);
   rqProvider->initBundle(tid, &nnode->rqbundle[1], key);
+  assert(nnode->rqbundle[0] != nullptr && nnode->rqbundle[1] != nullptr);
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -541,31 +542,33 @@ void bundle_citrustree<K, V, RecManager>::cleanup(int tid) {
 template <typename K, typename V, class RecManager>
 bool bundle_citrustree<K, V, RecManager>::validateBundles(int tid) {
   nodeptr curr = root->child[0];
+  bool valid = true;
+#ifdef BUNDLE_DEBUG
   block<node_t<K, V>> stack(nullptr);
   stack.push(curr);
-  bool valid = true;
   while (!stack.isEmpty()) {
     nodeptr node = stack.pop();
 
     // Validate the bundles.
-    if (node->child[0] != nullptr &&
-        node->child[0] != node->rqbundle[0]->getHead()->ptr_) {
+    nodeptr ptr;
+    timestamp_t ts;
+    ptr = node->rqbundle[0]->first(ts);
+    if (node->child[0] != nullptr && node->child[0] != ptr) {
       std::cout << "Pointer mismatch! [key=" << node->child[0]->key
                 << ",marked=" << node->child[0]->marked << "] "
-                << node->child[0]
-                << " vs. [key=" << node->rqbundle[0]->getHead()->ptr_->key
-                << ",marked=" << node->rqbundle[0]->getHead()->ptr_->marked
-                << "] " << node->rqbundle[0]->dump(0) << std::flush;
+                << node->child[0] << " vs. [key=" << ptr->key
+                << ",marked=" << ptr->marked << "] "
+                << node->rqbundle[0]->dump(0) << std::flush;
       valid = false;
     }
-    if (node->child[1] != nullptr &&
-        node->child[1] != node->rqbundle[1]->getHead()->ptr_) {
+
+    ptr = node->rqbundle[1]->first(ts);
+    if (node->child[1] != nullptr && node->child[1] != ptr) {
       std::cout << "Pointer mismatch! [key=" << node->child[1]->key
                 << ",marked=" << node->child[1]->marked << "] "
-                << node->child[1]
-                << " vs. [key=" << node->rqbundle[1]->getHead()->ptr_->key
-                << ",marked=" << node->rqbundle[1]->getHead()->ptr_->marked
-                << "] " << node->rqbundle[1]->dump(0) << std::flush;
+                << node->child[1] << " vs. [key=" << ptr->key
+                << ",marked=" << ptr->marked << "] "
+                << node->rqbundle[1]->dump(0) << std::flush;
       valid = false;
     }
 
@@ -579,6 +582,7 @@ bool bundle_citrustree<K, V, RecManager>::validateBundles(int tid) {
       stack.push(right);
     }
   }
+#endif
   return valid;
 }
 

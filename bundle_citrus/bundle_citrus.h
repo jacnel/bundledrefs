@@ -58,10 +58,7 @@ struct node_t {
 
   bool validate() {
     bool valid = true;
-    if (rqbundle[0]->getHead()->ptr_ != child[0]) {
-      valid = false;
-    }
-    if (rqbundle[1]->getHead()->ptr_ != child[1]) {
+    if (rqbundle[0]->first() != child[0] || rqbundle[1]->first() != child[1]) {
       valid = false;
     }
     return valid;
@@ -70,6 +67,8 @@ struct node_t {
   ~node_t() {
     delete rqbundle[0];
     delete rqbundle[1];
+    rqbundle[0] = nullptr;
+    rqbundle[1] = nullptr;
   }
 };
 
@@ -184,6 +183,7 @@ class bundle_citrustree {
   bool validateBundles(int tid);
 
   string getBundleStatsString() {
+    cleanup(0);
     unsigned int max = 0;
     nodeptr max_node = nullptr;
     int max_direction = 0;
@@ -198,10 +198,23 @@ class bundle_citrustree {
       curr = s.top();
       s.pop();
       auto result = unique.insert(curr);
-      if (result.second) {
-        // If this is an unseen node, update stats.
-        int left = curr->rqbundle[0]->getSize();
-        int right = curr->rqbundle[1]->getSize();
+      if (result.second && curr != nullptr) {
+        // If the node is unseen, then get its bundles' entries and add them to
+        // the stack, then update bundle statistics.
+
+        int left;
+        int right;
+        std::pair<nodeptr, timestamp_t>* left_entries =
+            curr->rqbundle[0]->get(left);
+        std::pair<nodeptr, timestamp_t>* right_entries =
+            curr->rqbundle[1]->get(right);
+        for (int i = 0; i < left; ++i) {
+          s.push(left_entries[i].first);
+        }
+        for (int i = 0; i < right; ++i) {
+          s.push(right_entries[i].first);
+        }
+
         if (left >= right && left > max) {
           max = left;
           max_node = curr;
@@ -213,28 +226,6 @@ class bundle_citrustree {
         }
         left_total += left;
         right_total += right;
-
-        // Add all nodes in the bundle to the stack, if we haven't seen this
-        // node before.
-        BundleEntry<node_t<K, V>>* left_bundle_entry =
-            curr->rqbundle[0]->getHead();
-        BundleEntry<node_t<K, V>>* right_bundle_entry =
-            curr->rqbundle[1]->getHead();
-        while (left_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP ||
-               right_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
-          if (left_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
-            if (left_bundle_entry->ptr_ != nullptr) {
-              s.push((nodeptr)left_bundle_entry->ptr_);
-            }
-            left_bundle_entry = left_bundle_entry->next_;
-          }
-          if (right_bundle_entry->ts_ != BUNDLE_NULL_TIMESTAMP) {
-            if (right_bundle_entry->ptr_ != nullptr) {
-              s.push((nodeptr)right_bundle_entry->ptr_);
-            }
-            right_bundle_entry = right_bundle_entry->next_;
-          }
-        }
       }
     }
 
