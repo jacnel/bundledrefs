@@ -5,12 +5,12 @@
 #define BUNDLE_CLEANUP_SLEEP 100000
 #endif
 
-#ifdef BUNDLE_CIRCULAR_BUNDLE
+#if defined BUNDLE_CIRCULAR_BUNDLE
 #include "circular_bundle.h"
-#endif
-
-#ifdef BUNDLE_LINKED_BUNDLE
+#elif defined BUNDLE_LINKED_BUNDLE
 #include "linked_bundle.h"
+#else
+#error NO BUNDLE TYPE DEFINED
 #endif
 
 // NOTES ON IMPLEMENTATION DETAILS.
@@ -187,7 +187,7 @@ class RQProvider {
       ++rq_thread_data_[tid].data.local_timestamp;
     }
 #else
-    return curr_timestamp_.fetch_add(1);
+    return curr_timestamp_.fetch_add(1) + 1;
 #endif
   }
 

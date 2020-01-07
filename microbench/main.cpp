@@ -957,6 +957,13 @@ int main(int argc, char **argv) {
   PRINTI(MAXKEY);
   PRINTI(WORK_THREADS);
   PRINTI(RQ_THREADS);
+
+#if defined BUNDLE_LINKED_BUNDLE
+  cout << "BUNDLE_TYPE=linked" << endl;
+#elif defined BUNDLE_CIRCULAR_BUNDLE
+  cout << "BUNDLE_TYPE=circular" << endl;
+#endif
+
 #ifdef WIDTH_SEQ
   PRINTI(WIDTH_SEQ);
 #endif

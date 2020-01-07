@@ -1,5 +1,5 @@
-#ifndef RQ_BUNDLE_H
-#define RQ_BUNDLE_H
+#ifndef BUNDLE_CIRCULAR_BUNDLE_H
+#define BUNDLE_CIRCULAR_BUNDLE_H
 
 #include <pthread.h>
 #include <sys/types.h>
@@ -280,7 +280,9 @@ class Bundle : public BundleInterface<NodeType> {
 
   // [UNSAFE]. Returns the number of entries in the bundle.
   inline int size() override {
-    if (base_ > curr_) {
+    if (curr_ == -1) {
+      return 0;
+    } else if (base_ > curr_) {
       return (capacity_ - base_) + curr_;
     } else {
       return curr_ - base_;
@@ -301,6 +303,10 @@ class Bundle : public BundleInterface<NodeType> {
   std::pair<NodeType *, timestamp_t> *get(int &length) override {
     std::pair<NodeType *, timestamp_t> *retarr =
         new std::pair<NodeType *, timestamp_t>[capacity_];
+    if (curr_ == -1) {
+      length = 0;
+      return retarr;
+    }
     NodeType *ptr;
     timestamp_t ts;
     int pos = 0;
@@ -332,4 +338,4 @@ class Bundle : public BundleInterface<NodeType> {
   }
 };
 
-#endif  // RQ_BUNDLE_H
+#endif  // BUNDLE_CIRCULAR_BUNDLE_H

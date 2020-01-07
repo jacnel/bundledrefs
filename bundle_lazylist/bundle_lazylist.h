@@ -147,6 +147,7 @@ class bundle_lazylist {
           max_node = curr;
         }
         total += size;
+        delete entries;
       }
     }
 

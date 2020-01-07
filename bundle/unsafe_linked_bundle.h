@@ -84,10 +84,10 @@ class Bundle : public BundleInterface<NodeType> {
       expected = head_;
       new_entry->next_ = expected;
       long i = 0;
-      while (expected->ts_ == BUNDLE_PENDING_TIMESTAMP) {
-        // DEBUG_PRINT("insertAtHead");
-        CPU_RELAX;
-      }
+      // while (expected->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+      //   // DEBUG_PRINT("insertAtHead");
+      //   CPU_RELAX;
+      // }
       if (head_.compare_exchange_weak(expected, new_entry)) {
         ++updates;
         return;
@@ -106,10 +106,10 @@ class Bundle : public BundleInterface<NodeType> {
     // Start at head and work backwards until edge is found.
     BundleEntry<NodeType> *curr = head_;
     long i = 0;
-    while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
-      // DEBUG_PRINT("getPtrByTimestamp");
-      CPU_RELAX;
-    }
+    // while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+    //   // DEBUG_PRINT("getPtrByTimestamp");
+    //   CPU_RELAX;
+    // }
     while (curr != tail_ && curr->ts_ > ts) {
       assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
       curr = curr->next_;

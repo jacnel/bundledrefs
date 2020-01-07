@@ -7,7 +7,7 @@ FLAGS += -g
 #FLAGS += -DNDEBUG
 FLAGS += $(PLAF)
 FLAGS += -DUSE_GSTATS
-# FLAGS += -DNO_FREE
+FLAGS += -DNO_FREE
 #FLAGS += -DUSE_STL_HASHLIST
 FLAGS += -DUSE_SIMPLIFIED_HASHLIST
 #FLAGS += -DRAPID_RECLAMATION
@@ -36,20 +36,16 @@ FLAGS += -DINSERT_FUNC=insertIfAbsent
 #FLAGS += -DEERPRCU_DISABLE_RDTSC_TTAS
 # FLAGS += -DSKIPLIST_DEBUGGING_FLATTEN_MAX_LEVEL
 
+# Bundle configuration macros
+# --------------------------
 # FLAGS += -DBUNDLE_CLEANUP_NO_FREE
 # FLAGS += -DBUNDLE_DEBUG
 FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
-
-# Bundle configuration macros
-# --------------------------
 # FLAGS += -DBUNDLE_TIMESTAMP_RELAXATION=1000000
-FLAGS += -DBUNDLE_CLEANUP_SLEEP=100000
-# Definitions for bundle type.
-FLAGS += -DBUNDLE_CIRCULAR_BUNDLE
-# FLAGS += -DBUNDLE_LINKED_BUNDLE
+FLAGS += -DBUNDLE_CLEANUP_SLEEP=100000  # In microseconds.
 # Definitions for cleanup.
 # FLAGS += -DBUNDLE_CLEANUP_BACKGROUND
-FLAGS += -DBUNDLE_CLEANUP_UPDATE
+# FLAGS += -DBUNDLE_CLEANUP_UPDATE
 
 LDFLAGS = -L../lib
 LDFLAGS += -I../
@@ -176,11 +172,17 @@ lazylist.rq_rlu:
 citrus.rq_rlu:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRLU_CITRUS $(pinning) $(thispath)main.cpp $(thispath)../rlu/rlu.cpp $(LDFLAGS)
 
-.PHONY: bundle lazylist.rq_bundle skiplistlock.rq_bundle citrus.rq_bundle
-bundle: lazylist.rq_bundle skiplistlock.rq_bundle citrus.rq_bundle
-lazylist.rq_bundle:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplistlock.rq_bundle:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
-citrus.rq_bundle:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+.PHONY: bundle lazylist.rq_lbundle skiplistlock.rq_lbundle citrus.rq_lbundle lazylist.rq_cbundle skiplistlock.rq_cbundle citrus.rq_cbundle
+bundle: lazylist.rq_lbundle skiplistlock.rq_lbundle citrus.rq_lbundle lazylist.rq_cbundle skiplistlock.rq_cbundle citrus.rq_cbundle
+lazylist.rq_lbundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+skiplistlock.rq_lbundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+citrus.rq_lbundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+lazylist.rq_cbundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CIRCULAR_BUNDLE -DBUNDLE_LIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+skiplistlock.rq_cbundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CIRCULAR_BUNDLE -DBUNDLE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
+citrus.rq_cbundle:
+	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CIRCULAR_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)

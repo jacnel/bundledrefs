@@ -225,6 +225,7 @@ class bundle_skiplist {
             max_node = curr;
           }
           total += size;
+          delete entries;
       }
       prev = curr;
     }
