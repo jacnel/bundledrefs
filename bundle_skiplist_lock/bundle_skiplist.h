@@ -199,7 +199,6 @@ class bundle_skiplist {
   bool validateBundles(int tid);
 
   string getBundleStatsString() {
-    cleanup(0);
     unsigned int max = 0;
     nodeptr max_node = nullptr;
     long total = 0;

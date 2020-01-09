@@ -118,7 +118,6 @@ class bundle_lazylist {
   node_t<K, V>* debug_getEntryPoint() { return head; }
 
   string getBundleStatsString() {
-    cleanup(0);
     unsigned int max = 0;
     nodeptr max_node = nullptr;
     long num_nodes = 0;
@@ -137,7 +136,6 @@ class bundle_lazylist {
         // bundle stats.
         int size;
         std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle->get(size);
-        assert(size == 1);
         for (int i = 0; i < size; ++i) {
           s.push(entries[i].first);
         }

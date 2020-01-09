@@ -7,14 +7,12 @@ if [[ $# -ne 3 ]]; then
 fi
 
 datadir=$1
-files=$(ls ${datadir})
+ntrials=$2
+listname=$3
+files=$(ls ${datadir} | grep ${listname})
 cd ${datadir}
 
-ntrials=$2
 currfile=""
-
-listname=$3
-
 rqthrupt=0
 uthrupt=0
 totthrupt=0
@@ -34,7 +32,7 @@ echo "list,max_key,u_rate,rq_rate,wrk_threads,rq_threads,rq_size,u_latency,c_lat
 for filename in ${files}; do
   # Only parse lines for given listname.
   if [[ "${listname}" != "" ]] && [[ "$(echo ${filename} | grep ${listname})" == "" ]]; then
-    continue
+    exit
   fi
 
   # Assumes trials are consecutive.

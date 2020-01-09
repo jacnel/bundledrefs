@@ -183,7 +183,6 @@ class bundle_citrustree {
   bool validateBundles(int tid);
 
   string getBundleStatsString() {
-    cleanup(0);
     unsigned int max = 0;
     nodeptr max_node = nullptr;
     int max_direction = 0;

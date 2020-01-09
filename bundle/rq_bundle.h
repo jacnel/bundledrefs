@@ -172,7 +172,7 @@ class RQProvider {
       c->ds->cleanup(c->tid);
     }
     // Final cleanup.
-    c->ds->cleanup(c->tid);
+    // c->ds->cleanup(c->tid);
     pthread_exit(nullptr);
   }
 

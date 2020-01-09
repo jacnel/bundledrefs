@@ -7,7 +7,11 @@ source ./supported.inc
 
 # Overwrite datastructures and rqtechniques
 datastructures="lazylist skiplistlock citrus"
-rqtechniques="rlu snapcollector lbundle cbundle lockfree rwlock"
+rqtechniques="rlu lbundle cbundle lockfree rwlock"
+
+finalize_exp () {
+  echo 0 0 0 0 0 0 $1 done
+}
 
 ksizes="10000 100000 1000000"
 experiment=0
@@ -44,6 +48,7 @@ for rqsize in $rqsizes; do
   done
 done
 echo "Generated ${count} trials for experiment ${experiment}."
+finalize_exp "exp${experiment}" >>experiment_list.txt
 experiment=$((${experiment} + 1))
 
 echo "Preparing experiment ${experiment}: VARYING WORKLOAD WITH RQ SIZE 50"
@@ -67,8 +72,9 @@ for u in $urates; do
           if [ "$?" -ne 0 ]; then continue; fi
           check_ds_size $ds $k
           if [ "$?" -ne 0 ]; then continue; fi
-          rq=$((100 - ${u}))
-          echo $u $rq $rqsize $k $nrq $nwork $ds $alg >>experiment_list.txt
+          rq=$(( 100 - ${u} ))
+          u_=$(echo "scale=4;${u} / 2.0" | bc)
+          echo $u_ $rq $rqsize $k $nrq $nwork $ds $alg >>experiment_list.txt
           count=$((${count} + 1))
         done
       done
@@ -76,7 +82,9 @@ for u in $urates; do
   done
 done
 echo "Generated ${count} trials for experiment ${experiment}."
+finalize_exp "exp${experiment}" >>experiment_list.txt
 experiment=$((${experiment} + 1))
+
 
 echo "Preparing experiment ${experiment}: MIXED WORKLOAD (1:1 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 50"
 count=0
@@ -108,6 +116,7 @@ for e in $erates; do
   done
 done
 echo "Generated ${count} trials for experiment ${experiment}."
+finalize_exp "exp${experiment}" >>experiment_list.txt
 experiment=$((${experiment} + 1))
 
 # echo "Preparing experiment 2: MIXED WORKLOAD (9:1 CONTAINS TO UPDATE RATIO) WITH RQ SIZE OF 50"

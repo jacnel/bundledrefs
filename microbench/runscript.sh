@@ -60,6 +60,14 @@ while read u rq rqsize k nrq nwork ds alg; do
     if ((cnt1 < skip_steps_before)); then continue; fi
     if ((cnt1 > skip_steps_after)); then continue; fi
 
+    # This is a hack to move all results from each experiment to its own folder.
+    # The name of the folder to create will be in $ds and the new folder will be created under $outdir.
+    if [ ${alg} == "done" ]; then
+      mkdir ${outdir}/${ds}
+      mv ${outdir}/step* ${outdir}/${ds}
+      continue
+    fi
+
     fname="$outdir/step$cnt1.$machine.${ds}.${alg}.k$k.u$u.rq$rq.rqsize$rqsize.nrq$nrq.nwork$nwork.trial$trial.out"
     #echo "FNAME=$fname"
     cmd="./${machine}.${ds}.rq_${alg}.out -i $u -d $u -k $k -rq $rq -rqsize $rqsize ${prefill_and_time} -nrq $nrq -nwork $nwork ${pinning_policy}"
