@@ -46,9 +46,6 @@ class BundleEntry : public BundleEntryBase<NodeType> {};
 template <typename NodeType>
 class Bundle : public BundleInterface<NodeType> {
  private:
-  // Entry array and metadata.
-  struct BundleEntry<NodeType> *volatile entries_;  // Bundle entry array
-  volatile char pad0[PREFETCH_SIZE_BYTES];
   // The lower three bits are reserved for marking an ongoing update, resize or
   // reclaimer. The remaining bits are devoted to keeping track of the number of
   // concurrent range queries.
@@ -56,6 +53,8 @@ class Bundle : public BundleInterface<NodeType> {
   int volatile base_;      // Index of oldest entry.
   int volatile curr_;      // Index of newest entry.
   int volatile capacity_;  // Maximum number of entries.
+  // Entry array and metadata.
+  BundleEntry<NodeType> *volatile entries_;  // Bundle entry array
 
 #ifdef BUNDLE_DEBUG
   int its_;
@@ -140,16 +139,15 @@ class Bundle : public BundleInterface<NodeType> {
   }
 
  public:
-  // Empty bundle with initial capacity.
-  explicit Bundle()
-      : state_(NORMAL_STATE),
-        base_(0),
-        curr_(-1),
-        capacity_(BUNDLE_INIT_CAPACITY) {
+  ~Bundle() { delete[] entries_; }
+
+  void init() {
+    state_ = NORMAL_STATE;
+    base_ = 0;
+    curr_ = -1;
+    capacity_ = BUNDLE_INIT_CAPACITY;
     entries_ = new BundleEntry<NodeType>[BUNDLE_INIT_CAPACITY];
   }
-
-  ~Bundle() { delete[] entries_; }
 
   // Returns a reference to the node that satisfies the snapshot at the given
   // timestamp. If all
@@ -245,7 +243,7 @@ class Bundle : public BundleInterface<NodeType> {
     while (true) {
       while (state_ & PENDING_STATE)
         ;  // Wait for ongoing op to finish.
-      expected = state_ & RQ_STATE & RECLAIM_STATE;
+      expected = state_ & ~PENDING_STATE;
       if (state_.compare_exchange_weak(expected, expected | PENDING_STATE)) {
         break;
       }

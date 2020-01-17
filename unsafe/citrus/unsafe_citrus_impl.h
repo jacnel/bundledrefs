@@ -30,16 +30,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <utility>
-#include "bundle_citrus.h"
+#include "unsafe_citrus.h"
 #include "locks_impl.h"
 #include "urcu.h"
 using namespace std;
 using namespace urcu;
 
 template <typename K, typename V, class RecManager>
-nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
+nodeptr unsafe_citrustree<K, V, RecManager>::newNode(const int tid, K key,
                                                      V value) {
-  nodeptr nnode = recordmgr->template allocate<node_t<K, V>>(tid);
+  // nodeptr nnode = recordmgr->template allocate<node_t<K, V>>(tid);
+  nodeptr nnode = new node_t<K, V>();
   if (nnode == NULL) {
     printf("out of memory\n");
     exit(1);
@@ -55,10 +56,6 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
   //        printf("\n mutex init failed\n");
   //    }
   nnode->lock = false;
-  nnode->rqbundle[0] = new Bundle<node_t<K,V>>();
-  nnode->rqbundle[0]->init();
-  nnode->rqbundle[1] = new Bundle<node_t<K,V>>();
-  nnode->rqbundle[1]->init();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -66,18 +63,13 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
 }
 
 template <typename K, typename V, class RecManager>
-bundle_citrustree<K, V, RecManager>::bundle_citrustree(
+unsafe_citrustree<K, V, RecManager>::unsafe_citrustree(
     const K bigger_than_max_key, const V _NO_VALUE, const int numProcesses)
     : recordmgr(new RecManager(numProcesses, SIGQUIT)),
-      rqProvider(new RQProvider<K, V, node_t<K, V>,
-                                bundle_citrustree<K, V, RecManager>, RecManager,
-                                LOGICAL_DELETION_USAGE, false>(numProcesses,
-                                                               this, recordmgr))
 #ifdef USE_DEBUGCOUNTERS
       ,
       counters(new debugCounters(numProcesses))
 #endif
-      ,
       NO_KEY(bigger_than_max_key),
       NO_VALUE(_NO_VALUE) {
   //    cout<<"IN CONSTRUCTOR: NO_VALUE="<<NO_VALUE<<" AND
@@ -99,10 +91,11 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
   root = NULL;  // to prevent reading from uninitialized root pointer in the
   // following call (which, depending on the rq provider, may read
   // root, e.g., to perform a cas)
-  Bundle<node_t<K, V>>* bundles[] = {_root->rqbundle[0], nullptr};
-  nodeptr ptrs[] = {_rootchild, nullptr};
-  rqProvider->linearize_update_at_write(tid, &root, _root, bundles, ptrs,
-                                        INSERT);
+  // Bundle<node_t<K, V>>* bundles[] = {_root->rqbundle[0], nullptr};
+  // nodeptr ptrs[] = {_rootchild, nullptr};
+  // rqProvider->linearize_update_at_write(tid, &root, _root, bundles, ptrs,
+  //                                       INSERT);
+  root = _root;
 #else
   root = newNode(tid, NO_KEY, NO_VALUE);
   root->child[0] = newNode(tid, NO_KEY, NO_VALUE);
@@ -110,11 +103,11 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
 }
 
 template <typename K, typename V, class RecManager>
-bundle_citrustree<K, V, RecManager>::~bundle_citrustree() {
+unsafe_citrustree<K, V, RecManager>::~unsafe_citrustree() {
   int numNodes = 0;
   dfsDeallocateBottomUp(root, &numNodes);
   VERBOSE DEBUG COUTATOMIC(" deallocated nodes " << numNodes << endl);
-  delete rqProvider;
+  // delete rqProvider;
   recordmgr->printStatus();
   delete recordmgr;
 #ifdef USE_DEBUGCOUNTERS
@@ -123,9 +116,8 @@ bundle_citrustree<K, V, RecManager>::~bundle_citrustree() {
 }
 
 template <typename K, typename V, class RecManager>
-const pair<V, bool> bundle_citrustree<K, V, RecManager>::find(const int tid,
+const pair<V, bool> unsafe_citrustree<K, V, RecManager>::find(const int tid,
                                                               const K& key) {
-  recordmgr->leaveQuiescentState(tid, true);
   readLock();
   nodeptr curr = root->child[0];
   K ckey = curr->key;
@@ -136,22 +128,20 @@ const pair<V, bool> bundle_citrustree<K, V, RecManager>::find(const int tid,
   }
   readUnlock();
   if (curr == NULL) {
-    recordmgr->enterQuiescentState(tid);
     return pair<V, bool>(NO_VALUE, false);
   }
   V result = curr->value;
-  recordmgr->enterQuiescentState(tid);
   return pair<V, bool>(result, true);
 }
 
 template <typename K, typename V, class RecManager>
-bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
+bool unsafe_citrustree<K, V, RecManager>::contains(const int tid,
                                                    const K& key) {
   return find(tid, key).second;
 }
 
 template <typename K, typename V, class RecManager>
-bool bundle_citrustree<K, V, RecManager>::validate(const int tid, nodeptr prev,
+bool unsafe_citrustree<K, V, RecManager>::validate(const int tid, nodeptr prev,
                                                    int tag, nodeptr curr,
                                                    int direction) {
   if (curr == NULL) {
@@ -181,7 +171,7 @@ bool bundle_citrustree<K, V, RecManager>::validate(const int tid, nodeptr prev,
   }
 
 template <typename K, typename V, class RecManager>
-const V bundle_citrustree<K, V, RecManager>::doInsert(const int tid,
+const V unsafe_citrustree<K, V, RecManager>::doInsert(const int tid,
                                                       const K& key,
                                                       const V& value,
                                                       bool onlyIfAbsent) {
@@ -192,7 +182,6 @@ const V bundle_citrustree<K, V, RecManager>::doInsert(const int tid,
   int tag;
 
 retry:
-  recordmgr->leaveQuiescentState(tid);
   readLock();
   SEARCH;
   tag = prev->tag[direction];
@@ -200,7 +189,6 @@ retry:
   if (curr != NULL) {
     if (onlyIfAbsent) {
       V result = curr->value;
-      recordmgr->enterQuiescentState(tid);
       assert(result != NO_VALUE);
       return result;
     } else {
@@ -247,36 +235,36 @@ retry:
     // nodeptr insertedNodes[] = {nnode, NULL};
     // nodeptr deletedNodes[] = {NULL};
 
-    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1], nullptr};
-    nodeptr ptrs[] = {nnode, nullptr, nullptr, nullptr};
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction], nnode,
-                                          bundles, ptrs, INSERT);
+    // Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction],
+    // nnode->rqbundle[0], nnode->rqbundle[1], nullptr}; nodeptr ptrs[] =
+    // {nnode, nullptr, nullptr, nullptr};
+    // rqProvider->linearize_update_at_write(tid, &prev->child[direction],
+    // nnode, bundles, ptrs, INSERT);
+    prev->child[direction] = nnode;
 
     releaseLock(&(prev->lock));
-    recordmgr->enterQuiescentState(tid);
     return NO_VALUE;
   } else {
     releaseLock(&(prev->lock));
-    recordmgr->enterQuiescentState(tid);
     goto retry;
   }
 }
 
 template <class K, class V, class RecManager>
-const V bundle_citrustree<K, V, RecManager>::insertIfAbsent(const int tid,
+const V unsafe_citrustree<K, V, RecManager>::insertIfAbsent(const int tid,
                                                             const K& key,
                                                             const V& val) {
   return doInsert(tid, key, val, true);
 }
 
 template <class K, class V, class RecManager>
-const V bundle_citrustree<K, V, RecManager>::insert(const int tid, const K& key,
+const V unsafe_citrustree<K, V, RecManager>::insert(const int tid, const K& key,
                                                     const V& val) {
   return doInsert(tid, key, val, false);
 }
 
 template <typename K, typename V, class RecManager>
-const pair<V, bool> bundle_citrustree<K, V, RecManager>::erase(const int tid,
+const pair<V, bool> unsafe_citrustree<K, V, RecManager>::erase(const int tid,
                                                                const K& key) {
   nodeptr prev;
   nodeptr curr;
@@ -291,12 +279,10 @@ const pair<V, bool> bundle_citrustree<K, V, RecManager>::erase(const int tid,
   int min_bucket;
 
 retry:
-  recordmgr->leaveQuiescentState(tid);
   readLock();
   SEARCH;
   readUnlock();
   if (curr == NULL) {
-    recordmgr->enterQuiescentState(tid);
     return pair<V, bool>(NO_VALUE, false);
   }
   acquireLock(&(prev->lock));
@@ -304,7 +290,6 @@ retry:
   if (!validate(tid, prev, 0, curr, direction)) {
     releaseLock(&(prev->lock));
     releaseLock(&(curr->lock));
-    recordmgr->enterQuiescentState(tid);
     goto retry;
   }
   if (curr->child[0] == NULL) {
@@ -313,17 +298,18 @@ retry:
     // nodeptr insertedNodes[] = {NULL};
     // nodeptr deletedNodes[] = {curr, NULL};
 
-    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
-    nodeptr ptrs[] = {curr->child[1], nullptr};
+    // Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
+    // nodeptr ptrs[] = {curr->child[1], nullptr};
 
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction],
-                                          (nodeptr)curr->child[1], bundles,
-                                          ptrs, REMOVE);
+    // rqProvider->linearize_update_at_write(tid, &prev->child[direction],
+    //                                       (nodeptr)curr->child[1], bundles,
+    //                                       ptrs, REMOVE);
+    prev->child[direction] = (nodeptr)curr->child[1];
 
     // prev->validate();
 
-    nodeptr deletedNodes[] = {curr, nullptr};
-    rqProvider->physical_deletion_succeeded(tid, deletedNodes);
+    // nodeptr deletedNodes[] = {curr, nullptr};
+    // rqProvider->physical_deletion_succeeded(tid, deletedNodes);
 
     if (prev->child[direction] == NULL) {
       prev->tag[direction]++;
@@ -333,7 +319,6 @@ retry:
 
     releaseLock(&(prev->lock));
     releaseLock(&(curr->lock));
-    recordmgr->enterQuiescentState(tid);
     return pair<V, bool>(result, true);
   }
   if (curr->child[1] == NULL) {
@@ -342,16 +327,17 @@ retry:
     // nodeptr insertedNodes[] = {NULL};
     // nodeptr deletedNodes[] = {curr, NULL};
 
-    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
-    nodeptr ptrs[] = {curr->child[0], nullptr};
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction],
-                                          (nodeptr)curr->child[0], bundles,
-                                          ptrs, REMOVE);
+    // Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
+    // nodeptr ptrs[] = {curr->child[0], nullptr};
+    // rqProvider->linearize_update_at_write(tid, &prev->child[direction],
+    //                                       (nodeptr)curr->child[0], bundles,
+    //                                       ptrs, REMOVE);
+    prev->child[direction] = curr->child[0];
 
     // prev->validate();
 
-    nodeptr deletedNodes[] = {curr, nullptr};
-    rqProvider->physical_deletion_succeeded(tid, deletedNodes);
+    // nodeptr deletedNodes[] = {curr, nullptr};
+    // rqProvider->physical_deletion_succeeded(tid, deletedNodes);
 
     if (prev->child[direction] == NULL) {
       prev->tag[direction]++;
@@ -361,7 +347,6 @@ retry:
 
     releaseLock(&(prev->lock));
     releaseLock(&(curr->lock));
-    recordmgr->enterQuiescentState(tid);
     return pair<V, bool>(result, true);
   }
   prevSucc = curr;
@@ -388,21 +373,24 @@ retry:
 
     // nodeptr insertedNodes[] = {nnode, NULL};
     // nodeptr deletedNodes[] = {curr, succ, NULL};
-    Bundle<node_t<K, V>>* bundles[] = {
-        prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1],
-        (prevSucc != curr ? prevSucc->rqbundle[0] : nullptr), nullptr};
-    nodeptr ptrs[] = {nnode, curr->child[0],
-                      (prevSucc != curr ? curr->child[1] : succ->child[1]),
-                      (prevSucc != curr ? succ->child[1] : nullptr), nullptr};
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction], nnode,
-                                          bundles, ptrs, REMOVE);
+    // Bundle<node_t<K, V>>* bundles[] = {
+    //     prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1],
+    //     (prevSucc != curr ? prevSucc->rqbundle[0] : nullptr), nullptr};
+    // nodeptr ptrs[] = {nnode, curr->child[0],
+    //                   (prevSucc != curr ? curr->child[1] : succ->child[1]),
+    //                   (prevSucc != curr ? succ->child[1] : nullptr),
+    //                   nullptr};
+    // rqProvider->linearize_update_at_write(tid, &prev->child[direction],
+    // nnode,
+    //                                       bundles, ptrs, REMOVE);
+    prev->child[direction] = nnode;
 
     // prev->validate();
     // nnode->validate();
     // prevSucc->validate();
 
-    nodeptr deletedNodes[] = {curr, succ, nullptr};
-    rqProvider->physical_deletion_succeeded(tid, deletedNodes);
+    // nodeptr deletedNodes[] = {curr, succ, nullptr};
+    // rqProvider->physical_deletion_succeeded(tid, deletedNodes);
 
     synchronize();
 
@@ -426,173 +414,54 @@ retry:
     releaseLock(&(curr->lock));
     if (prevSucc != curr) releaseLock(&(prevSucc->lock));
     releaseLock(&(succ->lock));
-    recordmgr->enterQuiescentState(tid);
     return pair<V, bool>(result, true);
   }
   releaseLock(&(prev->lock));
   releaseLock(&(curr->lock));
   if (prevSucc != curr) releaseLock(&(prevSucc->lock));
   releaseLock(&(succ->lock));
-  recordmgr->enterQuiescentState(tid);
   goto retry;
 }
 
 template <typename K, typename V, class RecManager>
-int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
+int unsafe_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                     const K& hi,
                                                     K* const resultKeys,
                                                     V* const resultValues) {
   // Traverse tree until the root of the subtree defining the range is found.
-  while (true) {
-    recordmgr->leaveQuiescentState(tid, true);
-    timestamp_t ts = rqProvider->start_traversal(tid);
-    nodeptr curr = root->child[0];
-    nodeptr pred = nullptr;
-    int direction = -1;
-    bool range_found = false;
-    while (curr != nullptr) {
-      if (curr->key >= lo && curr->key <= hi) {
-        range_found = true;
-        // Found the subtree that contains the range. Note that a concurrent
-        // update may have deleted curr, so we cannot guarantee that curr is in
-        // the range. We can however guarantee that the range is rooted at
-        curr = pred->rqbundle[direction]->getPtrByTimestamp(ts);
-        break;
-      } else if (curr->key < lo) {
-        // Search right subtree.
-        pred = curr;
-        curr = curr->child[1];
-        direction = 1;
-      } else {
-        // Search left subtree.
-        pred = curr;
-        curr = curr->child[0];
-        direction = 0;
-      }
-    }
-
-    // No keys exist in the range.
-    if (curr == nullptr) {
-      rqProvider->end_traversal(tid);
-      recordmgr->enterQuiescentState(tid);
-      if (!range_found) {
-        // Return if no node was in the range.
-        return 0;
-      }
-    } else if (curr != nullptr) {
-      block<node_t<K, V>> stack(nullptr);
-      int cnt = 0;
-      stack.push(curr);
-      while (!stack.isEmpty()) {
-        nodeptr node = stack.pop();
-
-        // what (if anything) we need to do with CITRUS' validation function?
-        // answer: nothing, because searches don't need to do anything with it.
-
-        // If the key is in the range, at it to the result set.
-        if (node->key >= lo && node->key <= hi) {
-          cnt += getKeys(tid, node, resultKeys + cnt, resultValues + cnt);
-        }
-
-        // Explore subtrees based on timestamp and range.
-        nodeptr left = node->rqbundle[0]->getPtrByTimestamp(ts);
-        nodeptr right = node->rqbundle[1]->getPtrByTimestamp(ts);
-        if (left != nullptr && lo < node->key) {
-          stack.push(left);
-        }
-        if (right != nullptr && hi > node->key) {
-          stack.push(right);
-        }
-      }
-      rqProvider->end_traversal(tid);
-      recordmgr->enterQuiescentState(tid);
-      return cnt;
-    }
-  }
-}
-
-template <typename K, typename V, class RecManager>
-void bundle_citrustree<K, V, RecManager>::cleanup(int tid) {
-  recordmgr->leaveQuiescentState(tid, true);
-  BUNDLE_INIT_CLEANUP(rqProvider);
   nodeptr curr = root->child[0];
+  nodeptr pred = nullptr;
 
   block<node_t<K, V>> stack(nullptr);
-  stack.push(curr);
-  while (!stack.isEmpty()) {
-    // Get the next node to process.
-    nodeptr node = stack.pop();
-
-    // Add its children to the stack.
-    nodeptr left = node->child[0];
-    nodeptr right = node->child[1];
-    if (left != nullptr) {
-      stack.push(left);
-    }
-    if (right != nullptr) {
-      stack.push(right);
-    }
-
-    // Clean up the bundles.
-    BUNDLE_CLEAN_BUNDLE(node->rqbundle[0]);
-    BUNDLE_CLEAN_BUNDLE(node->rqbundle[1]);
-  }
-  recordmgr->enterQuiescentState(tid);
-}
-
-template <typename K, typename V, class RecManager>
-bool bundle_citrustree<K, V, RecManager>::validateBundles(int tid) {
-  nodeptr curr = root->child[0];
-  bool valid = true;
-  block<node_t<K, V>> stack(nullptr);
+  int cnt = 0;
   stack.push(curr);
   while (!stack.isEmpty()) {
     nodeptr node = stack.pop();
-
-    // Validate the bundles.
-    nodeptr ptr;
-    timestamp_t ts;
-    ptr = node->rqbundle[0]->first(ts);
-    if (node->child[0] != ptr) {
-      std::cout << "Pointer mismatch! [key=" << node->child[0]->key
-                << ",marked=" << node->child[0]->marked << "] "
-                << node->child[0] << " vs. [key=" << ptr->key
-                << ",marked=" << ptr->marked << "] "
-                << node->rqbundle[0]->dump(0) << std::flush;
-      valid = false;
-    }
-
-    ptr = node->rqbundle[1]->first(ts);
-    if (node->child[1] != ptr) {
-      std::cout << "Pointer mismatch! [key=" << node->child[1]->key
-                << ",marked=" << node->child[1]->marked << "] "
-                << node->child[1] << " vs. [key=" << ptr->key
-                << ",marked=" << ptr->marked << "] "
-                << node->rqbundle[1]->dump(0) << std::flush;
-      valid = false;
-    }
-
-    // Add its children to the stack.
     nodeptr left = node->child[0];
     nodeptr right = node->child[1];
-    if (left != nullptr) {
+    if (left != nullptr && lo < node->key) {
       stack.push(left);
     }
-    if (right != nullptr) {
+    if (right != nullptr && hi > node->key) {
       stack.push(right);
     }
+
+    // If the key is in the range, at it to the result set.
+    if (node->key >= lo && node->key <= hi) {
+      cnt += getKeys(tid, node, resultKeys + cnt, resultValues + cnt);
+    }
   }
-  return valid;
+  return cnt;
 }
 
 template <typename K, typename V, class RecManager>
-long long bundle_citrustree<K, V, RecManager>::debugKeySum(nodeptr root) {
+long long unsafe_citrustree<K, V, RecManager>::debugKeySum(nodeptr root) {
   if (root == NULL) return 0;
   return root->key + debugKeySum(root->child[0]) + debugKeySum(root->child[1]);
 }
 
 template <typename K, typename V, class RecManager>
-long long bundle_citrustree<K, V, RecManager>::debugKeySum() {
+long long unsafe_citrustree<K, V, RecManager>::debugKeySum() {
   return debugKeySum(root->child[0]->child[0]);
 }
 

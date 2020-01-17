@@ -645,8 +645,8 @@ RC tpcc_txn_man::run_delivery(tpcc_query *query) {
 
     // Find a new order to deliver.
     uint64_t key_low, key_high;
-#ifdef DELIVERY_RQ_100
-    key_low = neworderKey(query->w_id, d_id, o_id - 100);
+#ifdef DELIVERY_RQ
+    key_low = neworderKey(query->w_id, d_id, o_id - DELIVERY_RQ);
 #else
     key_low = neworderKey(query->w_id, d_id, 2100);
 #endif

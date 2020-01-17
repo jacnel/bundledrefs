@@ -91,8 +91,8 @@ typedef bst<KEY_TYPE, VALUE_TYPE, less<KEY_TYPE>, RECORD_MANAGER_TYPE>
 
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_LOCKFREE) || \
     (INDEX_STRUCT == IDX_CITRUS_RQ_RWLOCK) ||     \
-    (INDEX_STRUCT == IDX_CITRUS_RQ_HTM_RWLOCK) || \
-    (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE)
+    (INDEX_STRUCT == IDX_CITRUS_RQ_HTM_RWLOCK) // || \
+    // (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE)
 #include "citrus_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
@@ -112,8 +112,8 @@ typedef citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_LOCKFREE) || \
     (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_RWLOCK) ||     \
     (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_HTM_RWLOCK) || \
-    (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_UNSAFE) ||     \
     (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_SNAPCOLLECTOR)
+    // (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_UNSAFE) ||     
 #include "skiplist_lock_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
@@ -138,6 +138,7 @@ typedef skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE)
 #define BUNDLE_MAX_BUNDLES_UPDATED 2
+#define BUNDLE_LINKED_BUNDLE
 #include "bundle_skiplist_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
@@ -151,14 +152,42 @@ typedef bundle_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define ISLEAF(x) false
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
 
+#elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_UNSAFE)
+#include "unsafe_skiplist_impl.h"
+typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
+typedef bool DESCRIPTOR_TYPE;  // no descriptor
+typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
+    RECORD_MANAGER_TYPE;
+typedef unsafe_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
+#define INDEX_CONSTRUCTOR_ARGS                   \
+  g_thread_cnt, numeric_limits<KEY_TYPE>::min(), \
+      numeric_limits<KEY_TYPE>::max() - 1, __NO_VALUE, rngs
+#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
+#define ISLEAF(x) false
+#define VALUES_ARRAY_TYPE VALUE_TYPE *
+
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
 #define BUNDLE_MAX_BUNDLES_UPDATED 4
+#define BUNDLE_LINKED_BUNDLE
 #include "bundle_citrus_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
 typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
     RECORD_MANAGER_TYPE;
 typedef bundle_citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
+#define INDEX_CONSTRUCTOR_ARGS \
+  numeric_limits<KEY_TYPE>::max(), __NO_VALUE, g_thread_cnt
+#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
+#define ISLEAF(x) false
+#define VALUES_ARRAY_TYPE VALUE_TYPE *
+
+#elif (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE)
+#include "unsafe_citrus_impl.h"
+typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
+typedef bool DESCRIPTOR_TYPE;  // no descriptor
+typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
+    RECORD_MANAGER_TYPE;
+typedef unsafe_citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define INDEX_CONSTRUCTOR_ARGS \
   numeric_limits<KEY_TYPE>::max(), __NO_VALUE, g_thread_cnt
 #define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)

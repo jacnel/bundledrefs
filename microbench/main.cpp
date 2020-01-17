@@ -958,10 +958,23 @@ int main(int argc, char **argv) {
   PRINTI(WORK_THREADS);
   PRINTI(RQ_THREADS);
 
+#ifdef RQ_BUNDLE
 #if defined BUNDLE_LINKED_BUNDLE
   cout << "BUNDLE_TYPE=linked" << endl;
 #elif defined BUNDLE_CIRCULAR_BUNDLE
   cout << "BUNDLE_TYPE=circular" << endl;
+#endif
+#if defined BUNDLE_CLEANUP_BACKGROUND
+  cout << "BUNDLE_CLEANUP=background" << endl;
+  cout << "BUNDLE_CLEANUP_SLEEP=" << BUNDLE_CLEANUP_SLEEP << endl;
+#elif defined BUNDLE_CLEANUP_UPDATE
+  cout << "BUNDLE_CLEANUP=update" << endl;
+#else
+  cout << "BUNDLE_CLEANUP=none" << endl;
+#endif
+#if defined BUNDLE_TIMESTAMP_RELAXATION
+  cout << "BUNDLE_TIMESTAMP_RELAXATION=" << BUNDLE_TIMESTAMP_RELAXATION << endl;
+#endif
 #endif
 
 #ifdef WIDTH_SEQ

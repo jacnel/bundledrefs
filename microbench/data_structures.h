@@ -304,6 +304,69 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
 
+#elif defined(UNSAFE_LIST)
+    #include "record_manager.h"
+    #include "unsafe_lazylist_impl.h"
+
+    #define DS_DECLARATION unsafe_lazylist<test_type, test_type, MEMMGMT_T>
+    #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type> >
+    #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE)
+
+    #define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+    #define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
+    #define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+    #define RQ_AND_CHECK_SUCCESS(rqcnt) rqcnt = ds->RQ_FUNC(tid, key, key+RQSIZE-1, rqResultKeys, (VALUE_TYPE *) rqResultValues)
+    #define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt-1]
+    #define INIT_THREAD(tid) ds->initThread(tid)
+    #define INIT_RQ_THREAD(tid) ds->initThread(tid, true)
+    #define DEINIT_THREAD(tid) ds->deinitThread(tid);
+    #define DEINIT_RQ_THREAD(tid) ds->deinitThread(tid, true);
+    #define INIT_ALL
+    #define DEINIT_ALL
+
+    #define PRINT_OBJ_SIZES cout<<"sizes: node="<<(sizeof(node_t<test_type, test_type>))<<endl;
+
+#elif defined(UNSAFE_SKIPLIST)
+    #include "record_manager.h"
+    #include "unsafe_skiplist_impl.h"
+
+    #define DS_DECLARATION unsafe_skiplist<test_type, test_type, MEMMGMT_T>
+    #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type> >
+    #define DS_CONSTRUCTOR new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE, glob.rngs)
+
+    #define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+    #define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
+    #define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+    #define RQ_AND_CHECK_SUCCESS(rqcnt) rqcnt = ds->RQ_FUNC(tid, key, key+RQSIZE-1, rqResultKeys, (VALUE_TYPE *) rqResultValues)
+    #define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt-1]
+    #define INIT_THREAD(tid) ds->initThread(tid)
+    #define DEINIT_THREAD(tid) ds->deinitThread(tid);
+    #define INIT_ALL  
+    #define DEINIT_ALL
+
+    #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
+    #define PRINT_OBJ_SIZES cout<<"sizes: node="<<(sizeof(node_t<test_type, test_type>))<<endl
+
+#elif defined(UNSAFE_CITRUS)
+    #include "record_manager.h"
+    #include "unsafe_citrus_impl.h"
+
+    #define DS_DECLARATION unsafe_citrustree<test_type, test_type, MEMMGMT_T>
+    #define MEMMGMT_T record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type> >
+    #define DS_CONSTRUCTOR new DS_DECLARATION(KEY_MAX, NO_VALUE, TOTAL_THREADS)
+
+    #define INSERT_AND_CHECK_SUCCESS ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+    #define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key).second
+    #define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+    #define RQ_AND_CHECK_SUCCESS(rqcnt) rqcnt = ds->RQ_FUNC(tid, key, key+RQSIZE-1, rqResultKeys, (VALUE_TYPE *) rqResultValues)
+    #define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt-1]
+    #define INIT_THREAD(tid) ds->initThread(tid); urcu::registerThread(tid);
+    #define DEINIT_THREAD(tid) ds->deinitThread(tid); urcu::unregisterThread();
+    #define INIT_ALL urcu::init(TOTAL_THREADS + 1);
+    #define DEINIT_ALL urcu::deinit(TOTAL_THREADS + 1);
+
+    #define PRINT_OBJ_SIZES cout<<"sizes: node="<<(sizeof(node_t<test_type, test_type>))<<endl;
+
 #else
     #error "Failed to define a data structure"
 #endif

@@ -2,6 +2,8 @@
 .vs*
 microbench/data/*
 microbench/data.old/*
+microbench/data*
+microbench/results
 microbench/graphs/*
 microbench/*.out
 microbench/warnings.txt

@@ -1,14 +1,18 @@
 #ifndef BUNDLE_RQ_BUNDLE_H
 #define BUNDLE_RQ_BUNDLE_H
 
+#ifdef BUNDLE_CLEANUP_BACKGROUND
 #ifndef BUNDLE_CLEANUP_SLEEP
-#define BUNDLE_CLEANUP_SLEEP 100000
+#error BUNDLE_CLEANUP_SLEEP NOT DEFINED
+#endif
 #endif
 
 #if defined BUNDLE_CIRCULAR_BUNDLE
 #include "circular_bundle.h"
 #elif defined BUNDLE_LINKED_BUNDLE
 #include "linked_bundle.h"
+#elif defined BUNDLE_UNSAFE_BUNDLE
+#include "unsafe_linked_bundle.h"
 #else
 #error NO BUNDLE TYPE DEFINED
 #endif
@@ -101,8 +105,9 @@ class RQProvider {
       init_[tid] = !init_[tid];
   }
 
-  void initBundle(int tid, Bundle<NodeType> *volatile *bundle, long k) {
-    *bundle = new Bundle<NodeType>();
+  void initBundle(int tid, Bundle<NodeType> &bundle, long k) {
+    // bundle = Bundle<NodeType>();
+
     SOFTWARE_BARRIER;
   }
 
@@ -135,8 +140,8 @@ class RQProvider {
     return oldest_active;
   }
 
-  void startCleanup() {
 #ifdef BUNDLE_CLEANUP_BACKGROUND
+  void startCleanup() {
     cleanup_args_ = new cleanup_args{&stop_cleanup_, ds_, num_processes_ - 1};
     if (pthread_create(&cleanup_thread_, nullptr, cleanup_run,
                        (void *)cleanup_args_)) {
@@ -146,11 +151,9 @@ class RQProvider {
     std::stringstream ss;
     ss << "Cleanup started: 0x" << std::hex << pthread_self() << std::endl;
     std::cout << ss.str() << std::flush;
-#endif
   }
 
   void stopCleanup() {
-#ifdef BUNDLE_CLEANUP_BACKGROUND
     std::cout << "Stopping cleanup..." << std::endl << std::flush;
     stop_cleanup_ = true;
     if (pthread_join(cleanup_thread_, nullptr)) {
@@ -158,36 +161,39 @@ class RQProvider {
       exit(-1);
     }
     delete cleanup_args_;
-#endif
   }
+#endif
 
  private:
+#ifdef BUNDLE_CLEANUP_BACKGROUND
   static void *cleanup_run(void *args) {
     std::cout << "Staring cleanup" << std::endl << std::flush;
     struct cleanup_args *c = (struct cleanup_args *)args;
     long i = 0;
     while (!(*(c->stop))) {
       usleep(BUNDLE_CLEANUP_SLEEP);
-      // DEBUG_PRINT("cleanup_run");
       c->ds->cleanup(c->tid);
     }
-    // Final cleanup.
-    // c->ds->cleanup(c->tid);
     pthread_exit(nullptr);
   }
+#endif
 
   inline timestamp_t get_update_lin_time(int tid) {
-    assert(curr_timestamp_ >= 0);
+#ifndef BUNDLE_UNSAFE_BUNDLE
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
-    if ((rq_thread_data_[tid].data.local_timestamp %
-             BUNDLE_TIMESTAMP_RELAXATION -
-         1) == 0) {
-      return curr_timestamp_.fetch_add(1);
+    if (((rq_thread_data_[tid].data.local_timestamp + 1) %
+             BUNDLE_TIMESTAMP_RELAXATION) == 0) {
+      ++rq_thread_data_[tid].data.local_timestamp;
+      return curr_timestamp_.fetch_add(1) + 1;
     } else {
       ++rq_thread_data_[tid].data.local_timestamp;
+      return curr_timestamp_;
     }
 #else
     return curr_timestamp_.fetch_add(1) + 1;
+#endif
+#else
+    return BUNDLE_MIN_TIMESTAMP;
 #endif
   }
 
@@ -195,17 +201,23 @@ class RQProvider {
   // Write the range query linearization time so updates do not recycle any
   // edges needed by this range query.
   inline timestamp_t start_traversal(int tid) {
-    // Atomic loads on rq_flag have acquire semantics.
+// Atomic loads on rq_flag have acquire semantics.
+#ifndef BUNDLE_UNSAFE_BUNDLE
     rq_thread_data_[tid].data.rq_flag = true;
     rq_thread_data_[tid].data.rq_lin_time = curr_timestamp_;
     rq_thread_data_[tid].data.rq_flag = false;
     return rq_thread_data_[tid].data.rq_lin_time;
+#else
+    return BUNDLE_MIN_TIMESTAMP;
+#endif
   }
 
   // Reset the range query linearization time so that updates may recycle an
   // edge we needed.
   inline void end_traversal(int tid) {
+#ifndef BUNDLE_UNSAFE_BUNDLE
     rq_thread_data_[tid].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
+#endif
   }
 
   // Find and update the newest reference in the predecesor's bundle. If this
@@ -214,7 +226,7 @@ class RQProvider {
   template <typename T>
   inline T linearize_update_at_write(const int tid, T volatile *const lin_addr,
                                      const T &lin_newval,
-                                     Bundle<NodeType> *const *const bundles,
+                                     Bundle<NodeType> **bundles,
                                      NodeType *const *const ptrs, op o) {
     // PENDING_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization

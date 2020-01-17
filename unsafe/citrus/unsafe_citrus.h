@@ -36,7 +36,6 @@
 // define BEFORE including rq_provider.h
 #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
 #endif
-#include "rq_bundle.h"
 using namespace std;
 
 #define LOGICAL_DELETION_USAGE false
@@ -51,38 +50,14 @@ struct node_t {
   int tag[2];
   volatile int lock;
   bool marked;
-
-  Bundle<node_t<K, V>>* rqbundle[2];
-
-  bool validate() {
-    bool valid = true;
-    node_t<K, V>* ptr;
-    timestamp_t ts;
-    ptr = rqbundle[0]->first(ts);
-    if (child[0] != ptr) {
-      std::cout << "Pointer mismatch! " << child[0] << " vs. "
-                << rqbundle[0]->dump(0) << std::flush;
-      valid = false;
-    }
-
-    ptr = rqbundle[1]->first(ts);
-    if (child[1] != ptr) {
-      std::cout << "Pointer mismatch!  " << child[1] << " vs. "
-                << rqbundle[1]->dump(0) << std::flush;
-      valid = false;
-    }
-    return valid;
-  }
 };
 
 #define nodeptr node_t<K, V>*
 
 template <typename K, typename V, class RecManager>
-class bundle_citrustree {
+class unsafe_citrustree {
  private:
   RecManager* const recordmgr;
-  RQProvider<K, V, node_t<K, V>, bundle_citrustree<K, V, RecManager>,
-             RecManager, LOGICAL_DELETION_USAGE, false>* const rqProvider;
 
   volatile char padding0[PREFETCH_SIZE_BYTES];
   nodeptr root;
@@ -103,8 +78,7 @@ class bundle_citrustree {
     if (u->child[0]) dfsDeallocateBottomUp(u->child[0], numNodes);
     if (u->child[1]) dfsDeallocateBottomUp(u->child[1], numNodes);
     MEMORY_STATS++(*numNodes);
-    // recordmgr->deallocate(0 /* tid */, u);
-    delete u;
+    recordmgr->deallocate(0 /* tid */, u);
   }
 
   const V doInsert(const int tid, const K& key, const V& value,
@@ -116,8 +90,8 @@ class bundle_citrustree {
  public:
   const K NO_KEY;
   const V NO_VALUE;
-  bundle_citrustree(const K max_key, const V NO_VALUE, int numProcesses);
-  ~bundle_citrustree();
+  unsafe_citrustree(const K max_key, const V NO_VALUE, int numProcesses);
+  ~unsafe_citrustree();
 
   const V insert(const int tid, const K& key, const V& value);
   const V insertIfAbsent(const int tid, const K& key, const V& value);
@@ -125,9 +99,6 @@ class bundle_citrustree {
   const pair<V, bool> find(const int tid, const K& key);
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
-  void cleanup(int tid);
-  void startCleanup() { rqProvider->startCleanup(); }
-  void stopCleanup() { rqProvider->stopCleanup(); }
   bool contains(const int tid, const K& key);
   int size();  // warning: this is a linear time operation, and is not
                // linearizable
@@ -184,87 +155,6 @@ class bundle_citrustree {
   }
   long long getSize() { return getSizeInNodes(); }
 
-  bool validateBundles(int tid);
-
-  string getBundleStatsString() {
-    unsigned int max = 0;
-    nodeptr max_node = nullptr;
-    int max_direction = 0;
-    long left_total = 0;
-    long right_total = 0;
-    stack<nodeptr> s;
-    unordered_set<node_t<K, V>*> unique;
-    nodeptr curr = root;
-    s.push((nodeptr)curr->child[0]);  // Two sentinals are at the root.
-    while (!s.empty()) {
-      // Try to add the current node to set of unique nodes.
-      curr = s.top();
-      s.pop();
-      auto result = unique.insert(curr);
-      if (result.second && curr != nullptr) {
-        // If the node is unseen, then get its bundles' entries and add them to
-        // the stack, then update bundle statistics.
-
-        int left;
-        int right;
-        std::pair<nodeptr, timestamp_t>* left_entries =
-            curr->rqbundle[0]->get(left);
-        std::pair<nodeptr, timestamp_t>* right_entries =
-            curr->rqbundle[1]->get(right);
-#ifdef NO_FREE
-        for (int i = 0; i < left; ++i) {
-          if (left_entries[i].first != nullptr) {
-            assert(left_entries[i].first->validate());
-            s.push(left_entries[i].first);
-          }
-        }
-        for (int i = 0; i < right; ++i) {
-          if (right_entries[i].first != nullptr) {
-            assert(right_entries[i].first->validate());
-            s.push(right_entries[i].first);
-          }
-        }
-#else
-        if (left > 0 && left_entries[0].first != nullptr) {
-          assert(left_entries[0].first->validate());
-          s.push(left_entries[0].first);
-        }
-        if (right > 0 && right_entries[0].first != nullptr) {
-          assert(right_entries[0].first->validate());
-          s.push(right_entries[0].first);
-        }
-#endif
-
-        if (left >= right && left > max) {
-          max = left;
-          max_node = curr;
-          max_direction = 0;
-        } else if (right > max) {
-          max = right;
-          max_node = curr;
-          max_direction = 1;
-        }
-        left_total += left;
-        right_total += right;
-
-        delete left_entries;
-        delete right_entries;
-      }
-    }
-
-    stringstream ss;
-    ss << "total reachable nodes         : " << unique.size() << endl;
-    ss << "average bundle size           : "
-       << ((left_total + right_total) / (double)unique.size()) << endl;
-    ss << "average left bundle size      : "
-       << (left_total / (double)unique.size()) << endl;
-    ss << "average right bundle size     : "
-       << (right_total / (double)unique.size()) << endl;
-    ss << "max bundle size               : " << max << endl;
-    ss << max_node->rqbundle[max_direction]->dump(0);
-    return ss.str();
-  }
-
   /**
    * This function must be called once by each thread that will
    * invoke any functions on this class.
@@ -279,7 +169,6 @@ class bundle_citrustree {
       init[tid] = !init[tid];
 
     recordmgr->initThread(tid);
-    rqProvider->initThread(tid);
   }
 
   void deinitThread(const int tid) {
@@ -288,7 +177,6 @@ class bundle_citrustree {
     else
       init[tid] = !init[tid];
 
-    rqProvider->deinitThread(tid);
     recordmgr->deinitThread(tid);
   }
 };

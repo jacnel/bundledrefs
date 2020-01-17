@@ -52,11 +52,8 @@ class BundleEntry : public BundleEntryBase<NodeType> {
 template <typename NodeType>
 class Bundle : public BundleInterface<NodeType> {
  private:
-  std::atomic<BundleEntry<NodeType> *> head_;
+  BundleEntry<NodeType> *volatile head_;
   BundleEntry<NodeType> *volatile tail_;
-  volatile int updates = 0;
-  BundleEntry<NodeType> *volatile last_recycled = nullptr;
-  volatile int oldest_edge = 0;
 
  public:
   explicit Bundle() {
@@ -75,51 +72,60 @@ class Bundle : public BundleInterface<NodeType> {
     delete tail_;
   }
 
+  void init() override {
+    tail_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
+    head_ = tail_;
+  }
+
   // Inserts a new rq_bundle_node at the head of the bundle.
   inline void prepare(NodeType *const ptr) override {
     BundleEntry<NodeType> *new_entry =
-        new BundleEntry<NodeType>(BUNDLE_PENDING_TIMESTAMP, ptr, nullptr);
-    BundleEntry<NodeType> *expected;
-    while (true) {
-      expected = head_;
-      new_entry->next_ = expected;
-      long i = 0;
-      // while (expected->ts_ == BUNDLE_PENDING_TIMESTAMP) {
-      //   // DEBUG_PRINT("insertAtHead");
-      //   CPU_RELAX;
-      // }
-      if (head_.compare_exchange_weak(expected, new_entry)) {
-        ++updates;
-        return;
-      }
-    }
+        new BundleEntry<NodeType>(1, ptr, head_);
+    // BundleEntry<NodeType> *expected;
+    // while (true) {
+    //   expected = head_;
+    //   new_entry->next_ = expected;
+    //   long i = 0;
+    //   // while (expected->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+    //   //   // DEBUG_PRINT("insertAtHead");
+    //   //   CPU_RELAX;
+    //   // }
+    //   if (head_.compare_exchange_weak(expected, new_entry)) {
+    //     ++updates;
+    //     return;
+    //   }
+    // }
+    head_ = new_entry;
   }
 
   inline void finalize(timestamp_t ts) override {
-    BundleEntry<NodeType> *entry = head_;
-    assert(entry->ts_ == BUNDLE_PENDING_TIMESTAMP);
-    entry->ts_ = ts;
+    // BundleEntry<NodeType> *entry = head_;
+    // entry->ts_ = ts;
   }
 
   // Returns a reference to the node that immediately followed at timestamp ts.
   inline NodeType *getPtrByTimestamp(timestamp_t ts) override {
     // Start at head and work backwards until edge is found.
     BundleEntry<NodeType> *curr = head_;
-    long i = 0;
+    // long i = 0;
     // while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
     //   // DEBUG_PRINT("getPtrByTimestamp");
     //   CPU_RELAX;
     // }
-    while (curr != tail_ && curr->ts_ > ts) {
-      assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
-      curr = curr->next_;
-    }
-#ifdef BUNDLE_DEBUG
-    if (curr->marked()) {
-      std::cout << dump(0) << std::flush;
-      exit(1);
-    }
-#endif
+    // if (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+    //   // Skip the pending entry.
+    //   curr = curr->next_;
+    // }
+    // while (curr != tail_ && curr->ts_ > ts) {
+    //   assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
+    //   curr = curr->next_;
+    // }
+// #ifdef BUNDLE_DEBUG
+//     if (curr->marked()) {
+//       std::cout << dump(0) << std::flush;
+//       exit(1);
+//     }
+// #endif
     return curr->ptr_;
   }
 
@@ -128,57 +134,55 @@ class Bundle : public BundleInterface<NodeType> {
   inline void reclaimEntries(timestamp_t ts) {
     // Obtain a reference to the pred non-reclaimable entry and first
     // reclaimable one.
-    BundleEntry<NodeType> *pred = head_;
-    long i = 0;
-    if (pred->ts_ == BUNDLE_PENDING_TIMESTAMP) {
-      // DEBUG_PRINT("reclaimEntries");
-      pred = pred->next_;
-    }
-    SOFTWARE_BARRIER;
-    BundleEntry<NodeType> *curr = pred->next_;
-    if (pred == tail_ || curr == tail_) {
-      return;  // Nothing to do.
-    }
+//     BundleEntry<NodeType> *pred = head_;
+//     long i = 0;
+//     if (pred->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+//       // DEBUG_PRINT("reclaimEntries");
+//       pred = pred->next_;
+//     }
+//     SOFTWARE_BARRIER;
+//     BundleEntry<NodeType> *curr = pred->next_;
+//     if (pred == tail_ || curr == tail_) {
+//       return;  // Nothing to do.
+//     }
 
-    // If there are no active RQs then we can recycle all edges, but the
-    // newest (i.e., head). Similarly if the oldest active RQ is newer than
-    // the newest entry, we can reclaim all older entries.
-    if (ts == BUNDLE_NULL_TIMESTAMP || pred->ts_ <= ts) {
-      pred->next_ = tail_;
-    } else {
-      // Traverse from head and remove nodes that are lower than ts.
-      while (curr != tail_ && curr->ts_ > ts) {
-        pred = curr;
-        curr = curr->next_;
-      }
-      if (curr != tail_) {
-        // Curr points to the entry required by the oldest timestamp. This entry
-        // will become the last entry in the bundle.
-        pred = curr;
-        curr = curr->next_;
-        pred->next_ = tail_;
-      }
-    }
-    last_recycled = curr;
-    oldest_edge = pred->ts_;
+//     // If there are no active RQs then we can recycle all edges, but the
+//     // newest (i.e., head). Similarly if the oldest active RQ is newer than
+//     // the newest entry, we can reclaim all older entries.
+//     if (ts == BUNDLE_NULL_TIMESTAMP || pred->ts_ <= ts) {
+//       pred->next_ = tail_;
+//     } else {
+//       // Traverse from head and remove nodes that are lower than ts.
+//       while (curr != tail_ && curr->ts_ > ts) {
+//         pred = curr;
+//         curr = curr->next_;
+//       }
+//       if (curr != tail_) {
+//         // Curr points to the entry required by the oldest timestamp. This entry
+//         // will become the last entry in the bundle.
+//         pred = curr;
+//         curr = curr->next_;
+//         pred->next_ = tail_;
+//       }
+//     }
 
-    // Reclaim nodes.
-    assert(curr != head_ && pred->next_ == tail_);
-    while (curr != tail_) {
-      pred = curr;
-      curr = curr->next_;
-      pred->mark(ts);
-#ifndef BUNDLE_CLEANUP_NO_FREE
-      delete pred;
-#endif
-    }
-#ifdef BUNDLE_DEBUG
-    if (curr != tail_) {
-      std::cout << curr << std::endl;
-      std::cout << dump(ts) << std::flush;
-      exit(1);
-    }
-#endif
+//     // Reclaim nodes.
+//     assert(curr != head_ && pred->next_ == tail_);
+//     while (curr != tail_) {
+//       pred = curr;
+//       curr = curr->next_;
+//       pred->mark(ts);
+// #ifndef BUNDLE_CLEANUP_NO_FREE
+//       delete pred;
+// #endif
+//     }
+// #ifdef BUNDLE_DEBUG
+//     if (curr != tail_) {
+//       std::cout << curr << std::endl;
+//       std::cout << dump(ts) << std::flush;
+//       exit(1);
+//     }
+// #endif
   }
 
   // [UNSAFE] Returns the number of bundle entries.
@@ -208,8 +212,8 @@ class Bundle : public BundleInterface<NodeType> {
     BundleEntry<NodeType> *entry = head_;
     ts = entry->ts_;
     return entry->ptr_;
-  }  
-  
+  }
+
   std::pair<NodeType *, timestamp_t> *get(int &length) {
     // Find the number of entries in the list.
     BundleEntry<NodeType> *curr_entry = head_;
@@ -252,11 +256,10 @@ class Bundle : public BundleInterface<NodeType> {
     } else {
       ss << "(unexpected end)";
     }
-    ss << " [updates=" << updates << ", last_recycled=" << last_recycled
-       << ", oldest_edge=" << oldest_edge << "]" << std::endl;
+    // ss << " [updates=" << updates << ", last_recycled=" << last_recycled
+      //  << ", oldest_edge=" << oldest_edge << "]" << std::endl;
     return ss.str();
   }
-
 };
 
 #endif  // BUNDLE_LINKED_BUNDLE_H

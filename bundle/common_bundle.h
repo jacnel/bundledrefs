@@ -18,6 +18,8 @@ class BundleEntryBase {
 template <typename NodeType>
 class BundleInterface {
  public:
+  virtual void init() = 0;
+
   // Prepares the next bundle entry by setting the timestamp to a pending state.
   virtual void prepare(NodeType *ptr) = 0;
 
@@ -45,6 +47,8 @@ class BundleInterface {
 
   // Prints information about the bundle.
   virtual string dump(timestamp_t ts) = 0;
+
+  virtual ~BundleInterface() {}
 };
 
 #endif  // BUNDLE_COMMON_BUNDLE_H

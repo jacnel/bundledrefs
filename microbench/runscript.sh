@@ -6,7 +6,7 @@
 
 source ../config.mk
 
-trials=5
+trials=1
 
 cols="%6s %12s %12s %12s %8s %6s %6s %8s %6s %6s %8s %12s %12s %12s %12s"
 headers="step machine ds alg k u rq rqsize nrq nwork trial throughput rqs updates finds"
@@ -54,22 +54,28 @@ cnt2=$(expr $cnt2 + 10000)
 printf "${cols}\n" ${headers} >>$fsummary
 cat $fsummary
 
+currdir=""
+
 while read u rq rqsize k nrq nwork ds alg; do
+  # This is a hack to move all results from each experiment to its own folder.
+  # The name of the folder to create will be in $ds and the new folder will be created under $outdir.
+  if [ ${alg} == "prepare" ]; then
+    currdir=${outdir}/${ds}
+    continue
+  fi
+
+  # Create a directory to organize all runs for a specific algorithm.
+  if [[ ! -d "${currdir}/${alg}" ]]; then
+    mkdir -p "${currdir}/${alg}"
+  fi
+
   for ((trial = 0; trial < $trials; ++trial)); do
     cnt1=$(expr $cnt1 + 1)
     if ((cnt1 < skip_steps_before)); then continue; fi
     if ((cnt1 > skip_steps_after)); then continue; fi
 
-    # This is a hack to move all results from each experiment to its own folder.
-    # The name of the folder to create will be in $ds and the new folder will be created under $outdir.
-    if [ ${alg} == "done" ]; then
-      mkdir ${outdir}/${ds}
-      mv ${outdir}/step* ${outdir}/${ds}
-      continue
-    fi
-
-    fname="$outdir/step$cnt1.$machine.${ds}.${alg}.k$k.u$u.rq$rq.rqsize$rqsize.nrq$nrq.nwork$nwork.trial$trial.out"
-    #echo "FNAME=$fname"
+    fname="${currdir}/${alg}/step$cnt1.$machine.${ds}.${alg}.k$k.u$u.rq$rq.rqsize$rqsize.nrq$nrq.nwork$nwork.trial$trial.out"
+    # echo "FNAME=$fname"
     cmd="./${machine}.${ds}.rq_${alg}.out -i $u -d $u -k $k -rq $rq -rqsize $rqsize ${prefill_and_time} -nrq $nrq -nwork $nwork ${pinning_policy}"
     echo "env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so $cmd" >$fname
     env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so $cmd >>$fname
