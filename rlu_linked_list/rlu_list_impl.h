@@ -232,9 +232,9 @@ int rlulist<K,V>::rangeQuery(const int tid, int lo, int hi, K * const resultKeys
         p_next = (nodeptr)RLU_DEREF(rlu_self, (p_next->p_next));
     }
     while (p_next->key <= hi) {
-        resultKeys[cnt] = p_next->key;
-        resultValues[cnt] = p_next->val;
-        ++cnt;
+        // resultKeys[cnt] = p_next->key;
+        // resultValues[cnt] = p_next->val;
+        cnt += getKeys(tid, p_next, resultKeys + cnt, resultValues + cnt);
         p_next = (nodeptr)RLU_DEREF(rlu_self, (p_next->p_next));
     }
 #ifdef USE_RQ_DEBUGGING

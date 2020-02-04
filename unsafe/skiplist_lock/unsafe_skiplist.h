@@ -10,7 +10,6 @@
 #endif
 #include "plaf.h"
 #include "random.h"
-#include "rq_bundle.h"
 
 using namespace std;
 
@@ -45,13 +44,7 @@ class node_t {
                       // fields that are modified at linearization points of
                       // operations to occupy a machine word)
     node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
-    Bundle<node_t>* rqbundle;
   };
-
-  bool validate() {
-    timestamp_t ts;
-    return p_next[0] == rqbundle->first(ts);
-  }
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
@@ -62,7 +55,7 @@ class node_t {
 #define nodeptr node_t<K, V>*
 
 template <typename K, typename V, class RecManager>
-class bundle_skiplist {
+class unsafe_skiplist {
  private:
   volatile char padding0[PREFETCH_SIZE_BYTES];
   nodeptr volatile p_head;
@@ -74,8 +67,6 @@ class bundle_skiplist {
   RecManager* const recmgr;
   Random* const
       threadRNGs;  // threadRNGs[tid * PREFETCH_SIZE_WORDS] = rng for thread tid
-  RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>, RecManager,
-             true, false>* rqProvider;
 #ifdef USE_DEBUGCOUNTERS
   debugCounters* const counters;
 #endif
@@ -97,9 +88,9 @@ class bundle_skiplist {
   const V NO_VALUE;
   volatile char padding3[PREFETCH_SIZE_BYTES];
 
-  bundle_skiplist(const int numProcesses, const K _KEY_MIN, const K _KEY_MAX,
+  unsafe_skiplist(const int numProcesses, const K _KEY_MIN, const K _KEY_MAX,
                   const V NO_VALUE, Random* const threadRNGs);
-  ~bundle_skiplist();
+  ~unsafe_skiplist();
 
   bool contains(const int tid, K key);
   const pair<V, bool> find(const int tid, const K& key);
@@ -112,9 +103,6 @@ class bundle_skiplist {
   V erase(const int tid, const K& key);
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
-
-  void cleanup(int tid);
-
   void initThread(const int tid);
   void deinitThread(const int tid);
 #ifdef USE_DEBUGCOUNTERS
@@ -158,11 +146,11 @@ class bundle_skiplist {
     return (lo <= key && key <= hi);
   }
   inline bool isLogicallyDeleted(const int tid, node_t<K, V>* node) {
-    return (rqProvider->read_addr(tid, &node->marked));
+    return node->marked;
   }
 
   inline bool isLogicallyInserted(const int tid, node_t<K, V>* node) {
-    return (rqProvider->read_addr(tid, &node->fullyLinked));
+    return node->fullyLinked;
   }
 
   bool validate(const long long keysum, const bool checkkeysum) { return true; }
@@ -188,56 +176,6 @@ class bundle_skiplist {
  public:
   long long debugKeySum() { return debugKeySum(p_head); }
 
-  void startCleanup() { rqProvider->startCleanup(); }
-
-  void stopCleanup() { rqProvider->stopCleanup(); }
-
-  bool validateBundles(int tid);
-
-  string getBundleStatsString() {
-    unsigned int max = 0;
-    nodeptr max_node = nullptr;
-    long total = 0;
-    stack<nodeptr> s;
-    unordered_set<node_t<K, V>*> unique;
-    nodeptr curr = p_head;
-    nodeptr prev;
-    s.push(curr);
-    while (!s.empty()) {
-      // Try to add the current node to set of unique nodes.
-      curr = s.top();
-      s.pop();
-      auto result = unique.insert(curr);
-      if (result.second && curr->key != KEY_MAX) {
-        int size;
-        std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle->get(size);
-// #ifdef NO_FREE
-//         for (int i = 0; i < size; ++i) {
-//           s.push(entries[i].first);
-//         }
-// #else
-        s.push(entries[0].first);
-// #endif
-
-        if (size > max) {
-          max = size;
-          max_node = curr;
-        }
-        total += size;
-        delete entries;
-      }
-      prev = curr;
-    }
-
-    stringstream ss;
-    ss << "total reachable nodes         : " << unique.size() << endl;
-    ss << "average bundle size           : " << (total / (double)unique.size())
-       << endl;
-    ss << "max bundle size               : " << max << endl;
-    // ss << "max is marked                 : " << max_node->marked << endl;
-    // ss << max_node->rqbundle->dump(0) << endl;
-    return ss.str();
-  }
 };
 
 #endif  // SKIPLIST_H

@@ -5,10 +5,11 @@ remove="step trial time_wait time_ts_alloc time_man time_index time_abort time_c
 for r in $remove; do
   colStr=$(echo $colStr | sed "s/$r,//")
 done
-echo $colStr | sed 's/,$//'
 
 ntrials=5
 n=0
+outfile="data.csv"
+echo $colStr | sed 's/,$//' >${outfile}
 
 file="data/rq_tpcc/summary.txt"
 if [[ $# == 1 ]]; then
@@ -39,7 +40,7 @@ cat $file | grep "datastructure" | while read line; do
     workload=$(echo $line | sed 's/.*workload=//' | sed 's/,.*//')
     datastructure=$(echo $line | sed 's/.*datastructure=//' | sed 's/,.*//')
     rqalg=$(echo $line | sed 's/.*rqalg=//' | sed 's/,.*//')
-    echo -n "$workload,$datastructure,$rqalg,"
+    echo -n "$workload,$datastructure,$rqalg," >>${outfile}
   fi
 
   txn_cnt=$(echo "$(echo $line | sed 's/.*txn_cnt=//' | sed 's/,.*//') + $txn_cnt" | bc)
@@ -78,7 +79,7 @@ cat $file | grep "datastructure" | while read line; do
     # More common values.
     nthreads=$(echo $line | sed 's/.*nthreads=//' | sed 's/,.*//')
 
-    echo "$txn_cnt,$abort_cnt,$run_time,$ixNumContains,$ixTimeContains,$ixNumInsert,$ixTimeInsert,$ixNumRemove,$ixTimeRemove,$ixNumRangeQuery,$ixTimeRangeQuery,$ixLenRangeQuery,$ixTotalOps,$ixTotalTime,$ixThroughput,$nthreads"
+    echo "$txn_cnt,$abort_cnt,$run_time,$ixNumContains,$ixTimeContains,$ixNumInsert,$ixTimeInsert,$ixNumRemove,$ixTimeRemove,$ixNumRangeQuery,$ixTimeRangeQuery,$ixLenRangeQuery,$ixTotalOps,$ixTotalTime,$ixThroughput,$nthreads" >>${outfile}
   fi
   n=$(($n + 1))
 

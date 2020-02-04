@@ -8,19 +8,16 @@
 // define BEFORE including rq_provider.h
 #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
 #endif
-#include "bundle_lazylist_impl.h"
-#include "rq_bundle.h"
+#include "unsafe_lazylist_impl.h"
 
 template <typename K, typename V>
 class node_t;
 #define nodeptr node_t<K, V>*
 
 template <typename K, typename V, class RecManager>
-class bundle_lazylist {
+class unsafe_lazylist {
  private:
   RecManager* const recordmgr;
-  RQProvider<K, V, node_t<K, V>, bundle_lazylist<K, V, RecManager>, RecManager,
-             true, false>* const rqProvider;
 #ifdef USE_DEBUGCOUNTERS
   debugCounters* const counters;
 #endif
@@ -40,9 +37,9 @@ class bundle_lazylist {
   const K KEY_MIN;
   const K KEY_MAX;
   const V NO_VALUE;
-  bundle_lazylist(int numProcesses, const K _KEY_MIN, const K _KEY_MAX,
+  unsafe_lazylist(int numProcesses, const K _KEY_MIN, const K _KEY_MAX,
                   const V NO_VALUE);
-  ~bundle_lazylist();
+  ~unsafe_lazylist();
   bool contains(const int tid, const K& key);
   V insert(const int tid, const K& key, const V& value) {
     return doInsert(tid, key, value, false);
@@ -53,10 +50,6 @@ class bundle_lazylist {
   V erase(const int tid, const K& key);
   int rangeQuery(const int tid, const K& lo, const K& hi, K* const resultKeys,
                  V* const resultValues);
-  void cleanup(int tid);
-  void startCleanup() { rqProvider->startCleanup(); }
-  void stopCleanup() { rqProvider->stopCleanup(); }
-  bool validateBundles(int tid);
 
   /**
    * This function must be called once by each thread that will
@@ -116,51 +109,6 @@ class bundle_lazylist {
   }
 
   node_t<K, V>* debug_getEntryPoint() { return head; }
-
-  string getBundleStatsString() {
-    unsigned int max = 0;
-    nodeptr max_node = nullptr;
-    long num_nodes = 0;
-    long total = 0;
-    stack<nodeptr> s;
-    unordered_set<nodeptr> unique;
-    nodeptr curr = head;
-    s.push(curr);
-    while (!s.empty()) {
-      // Try to add the current node to set of unique nodes.
-      curr = s.top();
-      s.pop();
-      auto result = unique.insert(curr);
-      if (result.second && curr->key != KEY_MAX) {
-        // If this is an unseen node, add bundle entries to stack and update
-        // bundle stats.
-        int size;
-        std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle->get(size);
-#ifdef NO_FREE
-        for (int i = 0; i < size; ++i) {
-          s.push(entries[i].first);
-        }
-#else
-        s.push(entries[0].first);
-#endif
-
-        if (size > max) {
-          max = size;
-          max_node = curr;
-        }
-        total += size;
-        delete entries;
-      }
-    }
-
-    stringstream ss;
-    ss << "total reachable nodes         : " << unique.size() << endl;
-    ss << "average bundle size           : " << (total / (double)unique.size())
-       << endl;
-    ss << "max bundle size               : " << max << endl;
-    ss << max_node->rqbundle->dump(0) << endl;
-    return ss.str();
-  }
 };
 
 #endif /* LAZYLIST_H */

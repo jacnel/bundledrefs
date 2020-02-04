@@ -15,8 +15,8 @@
 
 #include <cassert>
 #include <csignal>
-#include "bundle_lazylist.h"
 #include "locks_impl.h"
+#include "unsafe_lazylist.h"
 
 #ifndef casword_t
 #define casword_t uintptr_t
@@ -34,30 +34,17 @@ class node_t {
                // used with the lock-free RQProvider (which requires all fields
                // that are modified at linearization points of operations to be
                // at least as large as a machine word)
-  Bundle<node_t<K,V>>* rqbundle;
 
-  template <typename RQProvider>
-  bool isMarked(const int tid, RQProvider* const prov) {
-    return marked;
-  }
-
-  bool validate() {
-    timestamp_t ts;
-    return next == rqbundle->first(ts);
-  }
+  bool isMarked(const int tid) { return marked; }
 };
 
 template <typename K, typename V, class RecManager>
-bundle_lazylist<K, V, RecManager>::bundle_lazylist(const int numProcesses,
+unsafe_lazylist<K, V, RecManager>::unsafe_lazylist(const int numProcesses,
                                                    const K _KEY_MIN,
                                                    const K _KEY_MAX,
                                                    const V _NO_VALUE)
     // Plus 1 for the background thread.
-    : recordmgr(new RecManager(numProcesses, SIGQUIT)),
-      rqProvider(
-          new RQProvider<K, V, node_t<K, V>, bundle_lazylist<K, V, RecManager>,
-                         RecManager, true, false>(numProcesses, this,
-                                                  recordmgr))
+    : recordmgr(new RecManager(numProcesses, SIGQUIT))
 #ifdef USE_DEBUGCOUNTERS
       ,
       counters(new debugCounters(numProcesses))
@@ -71,24 +58,21 @@ bundle_lazylist<K, V, RecManager>::bundle_lazylist(const int numProcesses,
   nodeptr max = new_node(tid, KEY_MAX, 0, NULL);
   head = new_node(tid, KEY_MIN, 0, NULL);
 
-  // Perform linearization of max to ensure bundles correctly added.
-  Bundle<node_t<K, V>>* bundles[] = {head->rqbundle, nullptr};
-  nodeptr ptrs[] = {max, nullptr};
-  rqProvider->linearize_update_at_write(tid, &head->next, max, bundles, ptrs,
-                                        INSERT);
+  head->next = max;
 }
 
 template <typename K, typename V, class RecManager>
-bundle_lazylist<K, V, RecManager>::~bundle_lazylist() {
+unsafe_lazylist<K, V, RecManager>::~unsafe_lazylist() {
   const int dummyTid = 0;
   nodeptr curr = head;
   while (curr->key < KEY_MAX) {
     nodeptr next = curr->next;
-    recordmgr->deallocate(dummyTid, curr);
+    delete curr;
+    // recordmgr->deallocate(dummyTid, curr);
     curr = next;
   }
-  recordmgr->deallocate(dummyTid, curr);
-  delete rqProvider;
+  // recordmgr->deallocate(dummyTid, curr);
+  delete curr;
   recordmgr->printStatus();
   delete recordmgr;
 #ifdef USE_DEBUGCOUNTERS
@@ -97,32 +81,31 @@ bundle_lazylist<K, V, RecManager>::~bundle_lazylist() {
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_lazylist<K, V, RecManager>::initThread(const int tid) {
+void unsafe_lazylist<K, V, RecManager>::initThread(const int tid) {
   if (init[tid])
     return;
   else
     init[tid] = !init[tid];
 
   recordmgr->initThread(tid);
-  rqProvider->initThread(tid);
 }
 
 template <typename K, typename V, class RecManager>
-void bundle_lazylist<K, V, RecManager>::deinitThread(const int tid) {
+void unsafe_lazylist<K, V, RecManager>::deinitThread(const int tid) {
   if (!init[tid])
     return;
   else
     init[tid] = !init[tid];
 
   recordmgr->deinitThread(tid);
-  rqProvider->deinitThread(tid);
 }
 
 template <typename K, typename V, class RecManager>
-nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
+nodeptr unsafe_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
                                                     const V& val,
                                                     nodeptr next) {
-  nodeptr nnode = recordmgr->template allocate<node_t<K, V>>(tid);
+  // nodeptr nnode = recordmgr->template allocate<node_t<K, V>>(tid);
+  nodeptr nnode = new node_t<K,V>();
   if (nnode == NULL) {
     cout << "out of memory" << endl;
     exit(1);
@@ -132,8 +115,6 @@ nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
   nnode->next = next;
   nnode->marked = 0LL;
   nnode->lock = false;
-  nnode->rqbundle = new Bundle<node_t<K, V>>();
-  nnode->rqbundle->init();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -141,15 +122,14 @@ nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
 }
 
 template <typename K, typename V, class RecManager>
-inline int bundle_lazylist<K, V, RecManager>::validateLinks(const int tid,
+inline int unsafe_lazylist<K, V, RecManager>::validateLinks(const int tid,
                                                             nodeptr pred,
                                                             nodeptr curr) {
   return (!pred->marked && !curr->marked && (pred->next == curr));
 }
 
 template <typename K, typename V, class RecManager>
-bool bundle_lazylist<K, V, RecManager>::contains(const int tid, const K& key) {
-  recordmgr->leaveQuiescentState(tid, true);
+bool unsafe_lazylist<K, V, RecManager>::contains(const int tid, const K& key) {
   nodeptr curr = head;
   while (curr->key < key) {
     curr = curr->next;
@@ -159,19 +139,17 @@ bool bundle_lazylist<K, V, RecManager>::contains(const int tid, const K& key) {
   if ((curr->key == key) && !curr->marked) {
     res = curr->val;
   }
-  recordmgr->enterQuiescentState(tid);
   return (res != NO_VALUE);
 }
 
 template <typename K, typename V, class RecManager>
-V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
+V unsafe_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
                                               const V& val, bool onlyIfAbsent) {
   nodeptr curr;
   nodeptr pred;
   nodeptr newnode;
   V result;
   while (true) {
-    recordmgr->leaveQuiescentState(tid);
     pred = head;
     curr = pred->next;
     while (curr->key < key) {
@@ -183,14 +161,12 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       if (curr->key == key) {
         if (curr->marked) {  // this is an optimization
           releaseLock(&(pred->lock));
-          recordmgr->enterQuiescentState(tid);
           continue;
         }
         // node containing key is not marked
         if (onlyIfAbsent) {
           V result = curr->val;
           releaseLock(&(pred->lock));
-          recordmgr->enterQuiescentState(tid);
           return result;
         }
         acquireLock(&(curr->lock));
@@ -205,7 +181,6 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
         curr->val = val;  // original linearization point
         releaseLock(&(curr->lock));
         releaseLock(&(pred->lock));
-        recordmgr->enterQuiescentState(tid);
         return result;
       }
       // key is not in list
@@ -213,17 +188,12 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       result = NO_VALUE;
       newnode = new_node(tid, key, val, curr);
 
-      Bundle<node_t<K, V>>* bundles[] = {newnode->rqbundle, pred->rqbundle,
-                                         nullptr};
-      nodeptr ptrs[] = {curr, newnode, nullptr};
-      rqProvider->linearize_update_at_write(tid, &pred->next, newnode, bundles,
-                                            ptrs, INSERT);
+      pred->next = newnode;
+
       releaseLock(&(pred->lock));
-      recordmgr->enterQuiescentState(tid);
       return result;
     }
     releaseLock(&(pred->lock));
-    recordmgr->enterQuiescentState(tid);
   }
 }
 
@@ -232,12 +202,11 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
  * before removing it physically.
  */
 template <typename K, typename V, class RecManager>
-V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
+V unsafe_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
   nodeptr pred;
   nodeptr curr;
   V result;
   while (true) {
-    recordmgr->leaveQuiescentState(tid);
     pred = head;
     curr = pred->next;
     while (curr->key < key) {
@@ -247,7 +216,6 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
 
     if (curr->key != key) {
       result = NO_VALUE;
-      recordmgr->enterQuiescentState(tid);
       return result;
     }
     acquireLock(&(curr->lock));
@@ -259,101 +227,39 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
       result = curr->val;
       nodeptr c_nxt = curr->next;
 
-      Bundle<node_t<K, V>>* bundles[] = {pred->rqbundle, nullptr};
-      nodeptr ptrs[] = {c_nxt, nullptr};
-      rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL, bundles,
-                                            ptrs, REMOVE);
-
+      curr->marked = 1LL;
       pred->next = c_nxt;
-      nodeptr deletedNodes[] = {curr, nullptr};
-      rqProvider->physical_deletion_succeeded(tid, deletedNodes);
 
       releaseLock(&(curr->lock));
       releaseLock(&(pred->lock));
-      recordmgr->enterQuiescentState(tid);
       return result;
     }
     releaseLock(&(curr->lock));
     releaseLock(&(pred->lock));
-    recordmgr->enterQuiescentState(tid);
   }
 }
 
 template <typename K, typename V, class RecManager>
-int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
+int unsafe_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   const K& hi,
                                                   K* const resultKeys,
                                                   V* const resultValues) {
-  timestamp_t ts;
   int cnt = 0;
-  for (;;) {
-    recordmgr->leaveQuiescentState(tid, true);
-    ts = rqProvider->start_traversal(tid);
-    nodeptr pred = head;
-    nodeptr curr = pred->next;
-    while (curr->key < lo) {
-      pred = curr;
-      curr = curr->next;
-    }
-    assert(curr != nullptr);
-
-    curr = pred->rqbundle->getPtrByTimestamp(ts);
-    while (curr != nullptr && curr->key <= hi) {
-      if (curr->key >= lo) {
-        cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
-      }
-      curr = curr->rqbundle->getPtrByTimestamp(ts);
-    }
-    rqProvider->end_traversal(tid);
-    recordmgr->enterQuiescentState(tid);
-
-    // Traversal was completed successfully.
-    if (curr != nullptr) {
-      return cnt;
-    }
-  }
-}
-
-template <typename K, typename V, class RecManager>
-void bundle_lazylist<K, V, RecManager>::cleanup(int tid) {
-  // Walk the list using the newest edge and reclaim bundle entries.
-  recordmgr->leaveQuiescentState(tid);
-  BUNDLE_INIT_CLEANUP(rqProvider);
-  while (head == nullptr)
-    ;
-  BUNDLE_CLEAN_BUNDLE(head->rqbundle);
-  for (nodeptr curr = head->next; curr->key != KEY_MAX; curr = curr->next) {
-    // if (!curr->marked) {
-    BUNDLE_CLEAN_BUNDLE(curr->rqbundle);
-    // }
-  }
-  recordmgr->enterQuiescentState(tid);
-}
-
-template <typename K, typename V, class RecManager>
-bool bundle_lazylist<K, V, RecManager>::validateBundles(int tid) {
-  nodeptr curr = head;
-  nodeptr temp;
-  timestamp_t ts;
-  bool valid = true;
-#ifdef BUNDLE_DEBUG
-  while (curr->key < KEY_MAX) {
-    temp = curr->rqbundle->first(ts);
-    if (temp != curr->next) {
-      std::cout << "Pointer mismatch! [key=" << curr->next->key
-                << ",marked=" << curr->next->marked << "] " << curr->next
-                << " vs. [key=" << temp->key << ",marked=" << temp->marked
-                << "] " << curr->rqbundle->dump(0) << std::flush;
-      valid = false;
-    }
+  nodeptr pred = head;
+  nodeptr curr = pred->next;
+  while (curr->key < lo) {
     curr = curr->next;
   }
-#endif
-  return valid;
+  while (curr->key <= hi) {
+    cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
+    curr = curr->next;
+  }
+
+  return cnt;
 }
 
 template <typename K, typename V, class RecManager>
-long long bundle_lazylist<K, V, RecManager>::debugKeySum(nodeptr head) {
+long long unsafe_lazylist<K, V, RecManager>::debugKeySum(nodeptr head) {
   long long result = 0;
   nodeptr curr = head->next;
   while (curr->key < KEY_MAX) {
@@ -364,13 +270,13 @@ long long bundle_lazylist<K, V, RecManager>::debugKeySum(nodeptr head) {
 }
 
 template <typename K, typename V, class RecManager>
-long long bundle_lazylist<K, V, RecManager>::debugKeySum() {
+long long unsafe_lazylist<K, V, RecManager>::debugKeySum() {
   return debugKeySum(head);
 }
 
 template <typename K, typename V, class RecManager>
-inline bool bundle_lazylist<K, V, RecManager>::isLogicallyDeleted(
+inline bool unsafe_lazylist<K, V, RecManager>::isLogicallyDeleted(
     const int tid, node_t<K, V>* node) {
-  return node->isMarked(tid, rqProvider);
+  return node->isMarked(tid);
 }
 #endif /* LAZYLIST_IMPL_H */

@@ -1,7 +1,7 @@
 include ../config.mk
 PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_powerof2) -DCPU_FREQ_GHZ=$(cpu_freq_ghz) -DCPU_FREQ=$(cpu_freq_ghz)
 
-dict=CITRUS_RQ_BUNDLE
+dict=SKIPLISTLOCK_RQ_UNSAFE
 workload=TPCC
 
 CC=g++
@@ -69,6 +69,8 @@ INCLUDE += -I../rq/snapcollector
 INCLUDE += -I../bundle
 INCLUDE += -I../bundle_skiplist_lock
 INCLUDE += -I../bundle_citrus
+INCLUDE += -I../unsafe/citrus
+INCLUDE += -I../unsafe/skiplist_lock
 
 #CFLAGS += -DSKIP_PERMUTATIONS
 CFLAGS += $(INCLUDE) -DNOGRAPHITE=1 -O3 -DINDEX_STRUCT=IDX_$(dict) -DWORKLOAD=$(workload) #-Werror
@@ -79,7 +81,8 @@ CFLAGS += $(readonly)
 CFLAGS += -DHASH_PRIMARY_KEYS
 CFLAGS += -DALIGNED_ALLOCATIONS
 #CFLAGS += -DINDEX_NO_RECLAMATION
-# CFLAGS += -DDELIVERY_RQ_100
+CFLAGS += -DDELIVERY_RQ=100
+
 LDFLAGS = -L. -L./libs -pthread -g -lrt -std=c++0x -O3 -ldl
 LDFLAGS += $(CFLAGS)
 
