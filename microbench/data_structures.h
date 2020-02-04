@@ -252,8 +252,9 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define INIT_RQ_THREAD(tid) ds->initThread(tid, true)
     #define DEINIT_THREAD(tid) ds->deinitThread(tid);
     #define DEINIT_RQ_THREAD(tid) ds->deinitThread(tid, true);
+    #define VALIDATE_BUNDLES ((DS_DECLARATION *)glob.__ds)->validateBundles(0) ?  std::cout << "Bundle validation OK." << std::endl : std::cout << "Bundle validation failed." << std::endl;
     #define INIT_ALL
-    #define DEINIT_ALL
+    #define DEINIT_ALL VALIDATE_BUNDLES
 
     #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
@@ -275,8 +276,9 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt-1]
     #define INIT_THREAD(tid) ds->initThread(tid)
     #define DEINIT_THREAD(tid) ds->deinitThread(tid);
-    #define INIT_ALL  
-    #define DEINIT_ALL
+    #define VALIDATE_BUNDLES ((DS_DECLARATION *)glob.__ds)->validateBundles(0) ?  std::cout << "Bundle validation OK." << std::endl : std::cout << "Bundle validation failed." << std::endl;
+    #define INIT_ALL 
+    #define DEINIT_ALL VALIDATE_BUNDLES
 
     #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;
@@ -298,8 +300,9 @@ const test_type KEY_MAX = numeric_limits<test_type>::max()-1; // must be less th
     #define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt-1]
     #define INIT_THREAD(tid) ds->initThread(tid); urcu::registerThread(tid);
     #define DEINIT_THREAD(tid) ds->deinitThread(tid); urcu::unregisterThread();
+    #define VALIDATE_BUNDLES ((DS_DECLARATION *)glob.__ds)->validateBundles(0) ?  std::cout << "Bundle validation OK." << std::endl : std::cout << "Bundle validation failed." << std::endl;
     #define INIT_ALL urcu::init(TOTAL_THREADS + 1);
-    #define DEINIT_ALL urcu::deinit(TOTAL_THREADS + 1);
+    #define DEINIT_ALL VALIDATE_BUNDLES; urcu::deinit(TOTAL_THREADS + 1);
 
     #define BUNDLE_OBJ_SIZE (sizeof(Bundle<node_t<test_type, test_type>>))
     #define PRINT_OBJ_SIZES cout<<"sizes: node="<<((sizeof(node_t<test_type, test_type>))+BUNDLE_OBJ_SIZE)<<" including header="<<BUNDLE_OBJ_SIZE<<endl;

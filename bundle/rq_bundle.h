@@ -85,9 +85,32 @@ class RQProvider {
       rq_thread_data_[i].data.rq_flag = false;
     }
     curr_timestamp_ = BUNDLE_MIN_TIMESTAMP;
+
+#ifdef BUNDLE_CLEANUP_BACKGROUND
+    cleanup_args_ = new cleanup_args{&stop_cleanup_, ds_, num_processes_ - 1};
+    if (pthread_create(&cleanup_thread_, nullptr, cleanup_run,
+                       (void *)cleanup_args_)) {
+      cerr << "ERROR: could not create thread" << endl;
+      exit(-1);
+    }
+    std::stringstream ss;
+    ss << "Cleanup started: 0x" << std::hex << pthread_self() << std::endl;
+    std::cout << ss.str() << std::flush;
+#endif
   }
 
-  ~RQProvider() { delete[] rq_thread_data_; }
+  ~RQProvider() {
+#ifdef BUNDLE_CLEANUP_BACKGROUND
+    std::cout << "Stopping cleanup..." << std::endl << std::flush;
+    stop_cleanup_ = true;
+    if (pthread_join(cleanup_thread_, nullptr)) {
+      cerr << "ERROR: could not join thread" << endl;
+      exit(-1);
+    }
+    delete cleanup_args_;
+#endif
+    delete[] rq_thread_data_;
+  }
 
   // Initializes a thread and registers as an range query thread if it will
   // perform range queries.
@@ -140,29 +163,9 @@ class RQProvider {
     return oldest_active;
   }
 
-#ifdef BUNDLE_CLEANUP_BACKGROUND
-  void startCleanup() {
-    cleanup_args_ = new cleanup_args{&stop_cleanup_, ds_, num_processes_ - 1};
-    if (pthread_create(&cleanup_thread_, nullptr, cleanup_run,
-                       (void *)cleanup_args_)) {
-      cerr << "ERROR: could not create thread" << endl;
-      exit(-1);
-    }
-    std::stringstream ss;
-    ss << "Cleanup started: 0x" << std::hex << pthread_self() << std::endl;
-    std::cout << ss.str() << std::flush;
-  }
+  void startCleanup() {}
 
-  void stopCleanup() {
-    std::cout << "Stopping cleanup..." << std::endl << std::flush;
-    stop_cleanup_ = true;
-    if (pthread_join(cleanup_thread_, nullptr)) {
-      cerr << "ERROR: could not join thread" << endl;
-      exit(-1);
-    }
-    delete cleanup_args_;
-  }
-#endif
+  void stopCleanup() {}
 
  private:
 #ifdef BUNDLE_CLEANUP_BACKGROUND
@@ -182,7 +185,7 @@ class RQProvider {
 #ifndef BUNDLE_UNSAFE_BUNDLE
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
     if (((rq_thread_data_[tid].data.local_timestamp + 1) %
-             BUNDLE_TIMESTAMP_RELAXATION) == 0) {
+         BUNDLE_TIMESTAMP_RELAXATION) == 0) {
       ++rq_thread_data_[tid].data.local_timestamp;
       return curr_timestamp_.fetch_add(1) + 1;
     } else {

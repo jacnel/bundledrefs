@@ -633,12 +633,6 @@ void trial() {
   glob.start = true;
   SOFTWARE_BARRIER;
 
-#ifdef RQ_BUNDLE
-#ifdef BUNDLE_CLEANUP_BACKGROUND
-  ds->startCleanup();
-#endif
-#endif
-
   // pthread_join is replaced with sleeping, and kill threads if they run too
   // long method: sleep for the desired time + a small epsilon,
   //      then check "running.load()" to see if we're done.
@@ -704,16 +698,6 @@ void trial() {
     }
   }
 
-#ifdef RQ_BUNDLE
-#ifdef BUNDLE_CLEANUP_BACKGROUND
-  ds->stopCleanup();
-#endif
-  if (ds->validateBundles(0)) {
-    std::cout << "Bundle validation OK." << std::endl;
-  } else {
-    std::cout << "Bundle validation failed." << std::endl;
-  }
-#endif
 
   COUTATOMIC(endl);
   COUTATOMIC(
@@ -958,6 +942,7 @@ int main(int argc, char **argv) {
   PRINTI(WORK_THREADS);
   PRINTI(RQ_THREADS);
 
+// TODO: Find a way to keep strategy specific code out of main.
 #ifdef RQ_BUNDLE
 #if defined BUNDLE_LINKED_BUNDLE
   cout << "BUNDLE_TYPE=linked" << endl;

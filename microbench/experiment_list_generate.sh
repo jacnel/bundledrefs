@@ -7,7 +7,7 @@ source ./supported.inc
 
 # Overwrite datastructures and rqtechniques
 datastructures="lazylist skiplistlock citrus"
-rqtechniques="lbundle unsafe"
+rqtechniques="lbundle"
 
 prepare_exp () {
   echo 0 0 0 0 0 0 $1 prepare 
