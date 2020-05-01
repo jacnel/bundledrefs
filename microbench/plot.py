@@ -52,7 +52,7 @@ def plot_threadcount(dirpath, ds, max_key, algo, ylabel=False, xlabel=True, lege
     fig.show()
 
 
-def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, xlabel=True, legend=False):
+def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, legend=False):
     """ Generates a plot showing throughput as a function of number of threads
         for the given data structure. """
     reset_base_config()
@@ -79,32 +79,22 @@ def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, xlabel=True
         data[a]['y'] = data[a]['y'] / 1000000  # Normalize data
 
     # Plot layout configuration.
-    # x_axis_layout_['title']['text'] = '# Threads' if xlabel else ''
-    x_axis_layout_['showticklabels'] = True if xlabel else False
-    x_axis_layout_['title']['font']['size'] = 52 
+    x_axis_layout_['title'] = None
     x_axis_layout_['tickfont']['size'] = 52
     x_axis_layout_['nticks'] = 6
-    y_axis_layout_['title']['text'] = 'Throughput (Mops/s)' if ylabel else ''
-    y_axis_layout_['title']['font']['size'] = 52 
+    if ylabel:
+        y_axis_layout_['title']['text'] = 'Mops/s'
+        y_axis_layout_['title']['font']['size'] = 50 
+    else:
+        y_axis_layout_['title'] = None
     y_axis_layout_['tickfont']['size'] = 52
     y_axis_layout_['nticks'] = 5
-    # y_axis_layout_['dtick'] = 30
-    # y_axis_layout_['']
     legend_layout_ = {'font': legend_font_,
                       'orientation': 'h', 'x': 0, 'y': 1.15} if legend else {}
-    # reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
-    #                    'x1': len(nthreads)+0.6, 'y1': 1, 'line': {'width': 8, 'color': 'black'}, 'layer': 'below'}
-    box1_ = {'type': 'rect', 'yref': 'paper', 'x0': .5, 'x1': 1.5, 'y0': 0, 'y1': 1,
-             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    box2_ = {'type': 'rect', 'yref': 'paper', 'x0': 2.5, 'x1': 3.5, 'y0': 0, 'y1': 1,
-             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    box3_ = {'type': 'rect', 'yref': 'paper', 'x0': 4.5, 'x1': 5.5, 'y0': 0, 'y1': 1,
-             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    # layout_['shapes'] = [reference_line_, box1_, box2_, box3_]
     layout_['legend'] = legend_layout_
     layout_['autosize'] = False
     layout_['width'] = 750 
-    layout_['height'] = 650
+    layout_['height'] = 350
 
     fig = go.Figure(layout=layout_)
     for a in algos:
@@ -181,10 +171,8 @@ def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
                 # speedup[algo][rq_size]['y'] =  data['lbundle'][rq_size]['y'][::2] / data[algo][rq_size]['y'][::2]
 
     # Plot speedup.
-    # x_axis_layout_['title']['text'] = 'Range Query Size'
-    # y_axis_layout_['title']['text'] = 'Relative Throughput' if ylabel else ''
+    x_axis_layout_['showgrid'] = False
     y_axis_layout_['dtick'] = .25
-    # y_axis_layout_['side'] = 'right'
 
     legend_layout_ = {'font': legend_font_,
                       'orientation': 'v', 'x': 0, 'y': 1.15, 'traceorder': 'grouped', 'tracegroupgap': 0} if legend else {}
@@ -201,7 +189,7 @@ def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
 
     layout_['shapes'] = [box1_, box2_, box3_]
     layout_['legend'] = legend_layout_
-    layout_['height'] = 1000
+    layout_['height'] = 750
     layout_['width'] = 2200
 
     # fig = go.Figure(layout=layout_)
@@ -210,7 +198,7 @@ def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
         specs=[[{'rowspan': 2}, {}],
                [None, {}]], shared_xaxes=True)
     curr_row_ = 1
-    legend_shown_ = False  # When set to true no legend is shown.
+    legend_shown_ = not legend  # If not legend then no legend is shown.
     for ds in dss:
         showlegend_ = not legend_shown_ and ds != 'skiplistlock'
         for algo in algos:
@@ -246,7 +234,7 @@ def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
             x=0,
             y=0.5,
             showarrow=False,
-            text="Relative Throughput",
+            text="Rel. Throughput",
             textangle=-90,
             font=axis_font_,
             xref="paper",
@@ -256,8 +244,8 @@ def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
     fig.update_layout(layout_)
     fig.update_layout(barmode='group', bargap=0.05,
                       bargroupgap=0.01, annotations=annotations_)
-    # fig.write_image('./figs/rqsize.pdf')
-    fig.show()
+    # fig.show()
+    fig.write_image('./figs/rqsize.pdf')
 
 
 def plot_exp1(dirpath, ds, max_key, ylabel=False, legend=False):
@@ -553,16 +541,24 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
             shape_ = data[overalgo]['y'][::2].shape
             speedup[algo]['y'] = np.zeros(shape=shape_)
 
-    x_axis_layout_['title']['text'] = '# Threads'
-    # x_axis_layout_['title']['font']['size'] = 58
-    y_axis_layout_[
-        'title']['text'] = 'Throughput (ops/s)' if ylabel else ''
+    x_axis_layout_['title'] = None
+    x_axis_layout_['tickfont']['size'] = 52
+    y_axis_layout_['nticks'] = 6
+    y_axis_layout_['tickfont']['size'] = 52
+    if ylabel: 
+        y_axis_layout_['title']['text'] = 'Mops/s'
+        y_axis_layout_['title']['font']['size'] = 50
+    else:
+        y_axis_layout_['title'] = None
     legend_layout_ = {'font': legend_font_, 'orientation': 'v',
                       'x': 0, 'y': 1.3}
-    legend_layout_['font']['size'] = 40
+    # legend_layout_['font']['size'] = 40
     layout_['legend'] = legend_layout_
-    layout_['width'] = 850
-    layout_['height'] = 700
+    layout_['width'] = 750
+    if legend:
+        layout_['height'] = 750
+    else:
+        layout_['height'] = 350
 
     fig = go.Figure(layout=layout_)
     for algo in plotconfig.keys():
@@ -573,7 +569,7 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
         y_ = data[algo]['y']
         marker_ = {'symbol': symbol_,
                    'opacity': opacity_, 'size': 40,
-                   'line': {'color': 'black', 'width': 5}}
+                   'line': {'color': 'black', 'width': 5 if not legend else 3}}
         name_ = '<b>' + plotconfig[algo]['label'] + '</b>'
         fig.add_trace(go.Scatter(
             x=x_[0::2], y=y_[0::2], name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
@@ -828,12 +824,12 @@ if __name__ == "__main__":
     # plot_threadcount(dirpath, 'citrus', 100000, 'lbundle')
     # plot_threadcount(dirpath, 'citrus', 100000, 'lockfree')
 
-    plot_threadcount_all(dirpath, 'lazylist', 10000,
-                         0.0, ylabel=False, legend=False)
-    plot_threadcount_all(dirpath, 'lazylist', 10000, 2.0, ylabel=True, legend=False)
-    plot_threadcount_all(dirpath, 'lazylist', 10000, 10.0, ylabel=False, legend=False)
-    plot_threadcount_all(dirpath, 'lazylist', 10000, 50.0, ylabel=False, legend=False)
-    plot_threadcount_all(dirpath, 'lazylist', 10000, 90.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'lazylist', 10000,
+    #                      0.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'lazylist', 10000, 2.0, ylabel=True, legend=False)
+    # plot_threadcount_all(dirpath, 'lazylist', 10000, 10.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'lazylist', 10000, 50.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'lazylist', 10000, 90.0, ylabel=False, legend=False)
 
     # plot_threadcount_all(dirpath, 'skiplistlock', 100000,
     #                      0.0, ylabel=False, legend=False)
@@ -851,7 +847,7 @@ if __name__ == "__main__":
     # plot_threadcount_all(dirpath, 'citrus', 100000, 100.0, ylabel=True, legend=True)
 
     # EXPERIMENT 0.
-    # plot_exp0(dirpath, ['skiplistlock', 'citrus'], 100000, True, True)
+    # plot_exp0(dirpath, ['skiplistlock', 'citrus'], 100000, ylabel=True, legend=False)
 
     # EXPERIMENT 1.
     # plot_exp1(dirpath, 'lazylist', 10000, True)
@@ -863,8 +859,8 @@ if __name__ == "__main__":
     #                     'nofree', 'free', 'skiplistlock', 100000)
     # plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
     #                 'SKIPLISTLOCK', ylabel=True, legend=False)
-    # plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
-    #                 'CITRUS', ylabel=False, legend=False)
+    plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
+                    'CITRUS', ylabel=False, legend=True)
     # plot_relaxation(os.path.join(dirpath, 'relax'), 'skiplistlock', 100000, ylabel=True, legend=False)
     # plot_ubundle(dirpath, 'skiplistlock', 100000)
 

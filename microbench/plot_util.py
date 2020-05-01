@@ -108,6 +108,7 @@ def reset_base_config():
     layout_['xaxis'] = x_axis_layout_
     layout_['yaxis'] = y_axis_layout_
     layout_['plot_bgcolor'] = 'white'
+    layout_['margin'] = dict(l=0, r=10, t=10, b=0)
 
 
 class CSVFile():
