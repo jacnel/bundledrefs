@@ -1,2 +1,3 @@
-# limbolist
-Implementing range queries for lock-based concurrent linked data structures by bundling.
+# Bundled References
+
+In this paper we address the challenge of providing linearizablerange query operations for linked data structures by introducing anew building block; we callbundled references. Using bundled refer-ences provides range queries with a path through the data structureconsistent with their linearization point. Our design guaranteesthat range queries only traverse nodes belonging to their snapshotand that they never block writers. With multi-version concurrencycontrol (MVCC) in mind, we implement our technique in threedata structures. The experimental evaluation of our bundled linkedlist, skip list, and binary search tree, including their integrationas indexes in the DBx1000 in-memory database, shows up to 20%improvement over state-of-the-art techniques to provide lineariz-able range queries, as well as a more consistent performance profileacross a variety of workloads
