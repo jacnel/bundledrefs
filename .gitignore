@@ -9,6 +9,7 @@ microbench/*.out
 microbench/warnings.txt
 microbench/plot_config.py
 microbench/results*
+microbench/figs
 macrobench/bin/*
 macrobench/data/*
 microbench/experiment_list.txt

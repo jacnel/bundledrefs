@@ -1,7 +1,7 @@
 #!/bin/bash
 
 colStr=$(cat data/rq_tpcc/summary.txt | tail -1 | tr "," "\n" | tr -d " " | cut -d"=" -f1 | tr "\n" ",")
-remove="step trial time_wait time_ts_alloc time_man time_index time_abort time_cleanup latency deadlock_cnt cycle_detect dl_detect_time dl_wait_time time_query debug1 debug2 debug3 debug4 debug5 throughput node_size descriptor_size"
+remove="step trial time_wait time_ts_alloc time_man time_index time_abort time_cleanup latency deadlock_cnt cycle_detect dl_detect_time dl_wait_time time_query debug1 debug2 debug3 debug4 debug5 node_size descriptor_size"
 for r in $remove; do
   colStr=$(echo $colStr | sed "s/$r,//")
 done
@@ -35,6 +35,7 @@ cat $file | grep "datastructure" | while read line; do
     ixTotalTime=0
     ixThroughput=0
     n=1
+    throughput=0
 
     # Print common values.
     workload=$(echo $line | sed 's/.*workload=//' | sed 's/,.*//')
@@ -58,6 +59,7 @@ cat $file | grep "datastructure" | while read line; do
   ixTotalOps=$(echo "$(echo $line | sed 's/.*ixTotalOps=//' | sed 's/,.*//') + $ixTotalOps" | bc)
   ixTotalTime=$(echo "$(echo $line | sed 's/.*ixTotalTime=//' | sed 's/,.*//') + $ixTotalTime" | bc)
   ixThroughput=$(echo "$(echo $line | sed 's/.*ixThroughput=//' | sed 's/,.*//') + $ixThroughput" | bc)
+  throughput=$(echo "$(echo $line | sed 's/.*throughput=//' | sed 's/,.*//') + $throughput" | bc)
 
   if [[ $n == $ntrials ]]; then
     txn_cnt=$(echo "scale=4;$txn_cnt / $ntrials" | bc)
@@ -75,11 +77,13 @@ cat $file | grep "datastructure" | while read line; do
     ixTotalOps=$(echo "scale=4;$ixTotalOps / $ntrials" | bc)
     ixTotalTime=$(echo "scale=4;$ixTotalTime / $ntrials" | bc)
     ixThroughput=$(echo "scale=4;$ixThroughput / $ntrials" | bc)
+    throughput=$(echo "scale=4;$throughput / $ntrials" | bc)
 
     # More common values.
     nthreads=$(echo $line | sed 's/.*nthreads=//' | sed 's/,.*//')
 
-    echo "$txn_cnt,$abort_cnt,$run_time,$ixNumContains,$ixTimeContains,$ixNumInsert,$ixTimeInsert,$ixNumRemove,$ixTimeRemove,$ixNumRangeQuery,$ixTimeRangeQuery,$ixLenRangeQuery,$ixTotalOps,$ixTotalTime,$ixThroughput,$nthreads" >>${outfile}
+    # Hacky, but must keep order of colStr
+    echo "$txn_cnt,$abort_cnt,$run_time,$ixNumContains,$ixTimeContains,$ixNumInsert,$ixTimeInsert,$ixNumRemove,$ixTimeRemove,$ixNumRangeQuery,$ixTimeRangeQuery,$ixLenRangeQuery,$ixTotalOps,$ixTotalTime,$ixThroughput,$nthreads,$throughput" >>${outfile}
   fi
   n=$(($n + 1))
 

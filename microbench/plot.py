@@ -1,112 +1,142 @@
-import pandas
 import numpy as np
 import plotly
 import plotly.graph_objects as go
-import os
-import subprocess
-
-# General configuration.
-dsconfig = {'lazylist': {'max_keys': [10000]}, 'skiplistlock': {
-    'max_keys': [100000, 1000000]}, 'citrus': {'max_keys': [100000, 1000000]}}
-algorithms = ['lbundle', 'lockfree', 'rwlock', 'rlu', 'unsafe']
-max_keys = [10000, 100000, 1000000]
-ntrials = 3
-
-COLORS = ['rgb(31, 119, 180)', 'rgb(255, 127, 14)',
-          'rgb(44, 160, 44)', 'rgb(214, 39, 40)',
-          'rgb(148, 103, 189)', 'rgb(140, 86, 75)',
-          'rgb(227, 119, 194)', 'rgb(127, 127, 127)',
-          'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
-
-plotconfig = {
-    'rwlock': {'label': 'EBR-RQ', 'color': COLORS[0], 'symbol': 1, 'macrobench': 'RQ_RWLOCK'},
-    'lockfree': {'label': 'EBR-RQ-LF', 'color': COLORS[1], 'symbol': 0, 'macrobench': 'RQ_LOCKFREE'},
-    'rlu': {'label': 'RLU', 'color': COLORS[2], 'symbol': 3, 'macrobench': 'RQ_RLU'},
-    'lbundle': {'label': 'Bundle', 'color': COLORS[3], 'symbol': 2, 'macrobench': 'RQ_BUNDLE'},
-    'ubundle': {'label': 'Bundle (fully relaxed)', 'color': COLORS[4], 'symbol': 5, 'macrobench': ''},
-    'unsafe': {'label': 'Unsafe', 'color': COLORS[5], 'symbol': 4, 'macrobench': 'RQ_UNSAFE'},
-}
+from plot_util import *
 
 
-def update_opacity(colorstr, opacity):
-    temp = colorstr.split('(')
-    return 'rgba(' + temp[1][:-1] + ', ' + str(opacity) + ')'
+def plot_threadcount(dirpath, ds, max_key, algo, ylabel=False, xlabel=True, legend=False):
+    """ Generates a plot showing throughput as a function of number of threads
+        for the given data structure. """
+    reset_base_config()
+    csvfile = CSVFile.get_or_gen_csv(
+        os.path.join(dirpath, 'exp1'), ds, ntrials)
+    csv = CSVFile(csvfile)
+
+    # Provide column labels for desired x and y axis
+    x_axis = 'wrk_threads'
+    y_axis = 'tot_thruput'
+    u_rates = [10.0, 50.0]  # Update rate to plot
+
+    # Init data store
+    data = {}
+
+    # Read in data for each algorithm
+    for u in u_rates:
+        data[u] = csv.getdata(x_axis, y_axis, ['list', 'max_key', 'u_rate'], [
+                              ds+'-'+algo, max_key, u])
+
+    # Plot layout configuration.∏
+    x_axis_layout_['title']['text'] = '# Threads'
+    y_axis_layout_['title']['text'] = 'Relative Throughput' if ylabel else ''
+    legend_layout_ = {'font': legend_font_,
+                      'orientation': 'h', 'x': 0, 'y': 1.15, 'traceorder': 'grouped', 'tracegroupgap': 0} if legend else {}
+    # reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
+    #                    'x1': len(nthreads)+0.6, 'y1': 1, 'line': {'width': 8, 'color': 'black'}, 'layer': 'below'}
+    box1_ = {'type': 'rect', 'yref': 'paper', 'x0': .5, 'x1': 1.5, 'y0': 0, 'y1': 1,
+             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
+    box2_ = {'type': 'rect', 'yref': 'paper', 'x0': 2.5, 'x1': 3.5, 'y0': 0, 'y1': 1,
+             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
+    box3_ = {'type': 'rect', 'yref': 'paper', 'x0': 4.5, 'x1': 5.5, 'y0': 0, 'y1': 1,
+             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
+    # layout_['shapes'] = [reference_line_, box1_, box2_, box3_]
+    layout_['legend'] = legend_layout_
+
+    fig = go.Figure(layout=layout_)
+    for u in u_rates:
+        # symbol_ = plotconfig[a]['symbol']
+        # color_ = update_opacity(plotconfig[a]['color'], 1)
+        marker_ = {'size': 40, 'line': {
+            'width': 1.5, 'color': 'black'}, 'line_width': 3}
+        fig.add_scatter(x=data[u]['x'], y=data[u]['y'],
+                        name=algo+'-'+str(u), marker=marker_)
+    fig.show()
 
 
-relaxconfig = {
-    'relax1': {'label': 'T=1', 'color': COLORS[0], 'symbol': 1},
-    'relax2': {'label': 'T=2', 'color': COLORS[1], 'symbol': 0},
-    'relax5': {'label': 'T=5', 'color': COLORS[2], 'symbol': 3},
-    # 'relax10': {'color': 'seagreen', 'symbol': 2},
-    # 'relax20': {'color': 'darkorange', 'symbol': 5},
-    'relax50': {'label': 'T=50', 'color': COLORS[3], 'symbol': 4},
-    'relax100': {'label': 'T=100', 'color': COLORS[4], 'symbol': 6},
-    'relax1k': {'label': 'T=1000', 'color': COLORS[5], 'symbol': 7},
-    # 'relax10k': {'label': 'T=10000', 'color': COLORS[6], 'symbol': 8},
-    'ubundle': {'label': 'T=infinity', 'color': COLORS[9], 'symbol': 9},
-}
+def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, xlabel=True, legend=False):
+    """ Generates a plot showing throughput as a function of number of threads
+        for the given data structure. """
+    reset_base_config()
+    csvfile = CSVFile.get_or_gen_csv(
+        os.path.join(dirpath, 'exp4'), ds, ntrials)
+    csv = CSVFile(csvfile)
 
-delayconfig = {
-    'delay0': {'label': 'd=0ms', 'color': COLORS[0], 'symbol': 1},
-    'delay1000': {'label': 'd=1ms', 'color': COLORS[1], 'symbol': 0},
-    'delay5000': {'label': 'T=5ms', 'color': COLORS[2], 'symbol': 3},
-    'delay10000': {'label': 'T=10ms', 'color': COLORS[3], 'symbol': 4},
-    'delay100000': {'label': 'T=100ms', 'color': COLORS[4], 'symbol': 6},
-    'nofree': {'label': 'Leaky', 'color': COLORS[5], 'symbol': 7}
-}
+    # Provide column labels for desired x and y axis
+    x_axis = 'wrk_threads'
+    y_axis = 'tot_thruput'
 
-rootdir = '/home/jacob/sss/results/bundle/'
-machine = 'luigi'
-separate_unsafe = True
+    # Init data store
+    data = {}
 
-axis_font_ = {'family': 'Times-Roman',
-              'size': 72, 'color': 'black'}
-legend_font_ = {'family': 'Times-Roman',
-                'size': 24, 'color': 'black'}
+    # Ignores rows in .csv with the following label
+    ignore = ['ubundle']
+    algos = [k for k in plotconfig.keys() if k not in ignore]
 
-x_axis_layout_ = {'type': 'category', 'title': {'text': '',
-                                                'font': axis_font_.copy()}, 'tickfont': axis_font_.copy(), 'linecolor': 'black', 'linewidth': 4, 'mirror': True}
-y_axis_layout_ = {'title': {'text': '',
-                            'font': axis_font_.copy()}, 'tickfont': axis_font_.copy(), 'gridcolor': 'black', 'gridwidth': 2, 'linecolor': 'black', 'linewidth': 4, 'mirror': True}
-layout_ = {'xaxis': x_axis_layout_,
-           'yaxis': y_axis_layout_,
-           'plot_bgcolor': 'white'}
+    # Read in data for each algorithm
+    for a in algos:
+        data[a] = {}
+        data[a] = csv.getdata(x_axis, y_axis, ['list', 'max_key', 'u_rate'], [
+                              ds+'-'+a, max_key, u_rate])
+        data[a]['y'] = data[a]['y'] / 1000000  # Normalize data
 
-u_rates = [0, 10, 50, 90, 100]
+    # Plot layout configuration.
+    # x_axis_layout_['title']['text'] = '# Threads' if xlabel else ''
+    x_axis_layout_['showticklabels'] = True if xlabel else False
+    x_axis_layout_['title']['font']['size'] = 52 
+    x_axis_layout_['tickfont']['size'] = 52
+    x_axis_layout_['nticks'] = 6
+    y_axis_layout_['title']['text'] = 'Throughput (Mops/s)' if ylabel else ''
+    y_axis_layout_['title']['font']['size'] = 52 
+    y_axis_layout_['tickfont']['size'] = 52
+    y_axis_layout_['nticks'] = 5
+    # y_axis_layout_['dtick'] = 30
+    # y_axis_layout_['']
+    legend_layout_ = {'font': legend_font_,
+                      'orientation': 'h', 'x': 0, 'y': 1.15} if legend else {}
+    # reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
+    #                    'x1': len(nthreads)+0.6, 'y1': 1, 'line': {'width': 8, 'color': 'black'}, 'layer': 'below'}
+    box1_ = {'type': 'rect', 'yref': 'paper', 'x0': .5, 'x1': 1.5, 'y0': 0, 'y1': 1,
+             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
+    box2_ = {'type': 'rect', 'yref': 'paper', 'x0': 2.5, 'x1': 3.5, 'y0': 0, 'y1': 1,
+             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
+    box3_ = {'type': 'rect', 'yref': 'paper', 'x0': 4.5, 'x1': 5.5, 'y0': 0, 'y1': 1,
+             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
+    # layout_['shapes'] = [reference_line_, box1_, box2_, box3_]
+    layout_['legend'] = legend_layout_
+    layout_['autosize'] = False
+    layout_['width'] = 750 
+    layout_['height'] = 650
+
+    fig = go.Figure(layout=layout_)
+    for a in algos:
+        symbol_ = plotconfig[a]['symbol']
+        color_ = update_opacity(plotconfig[a]['color'], 1)
+        marker_ = {'symbol': symbol_, 'color': color_, 'size': 40, 'line': {
+            'width': 5, 'color': 'black'}}
+        line_ = {'width': 10}
+        name_ = '<b>' + plotconfig[a]['label'] + '</b>'
+        fig.add_scatter(x=data[a]['x'][0::2], y=data[a]['y'][0::2], name=name_,
+                        marker=marker_, line=line_, showlegend=legend)
+    # fig.show()
+    fig.write_image('./figs/'+ds+str(int(u_rate))+'.pdf')
+
+    # Print speedup for paper.
+    ignore = ['ubundle']
+    testalgo = 'rlu'
+    overalgos = [k for k in plotconfig.keys() if (k not in ignore and k != testalgo)]
+    print('Speedup for ' + ds + ' @ ' + str(u_rate) + '% updates')
+    for o in overalgos:
+        try:
+            print(testalgo +' / ' + o + '\n\t' + str(data[testalgo]['y'][0::2] / data[o]['y'][0::2]))
+        except ValueError:
+            print(testalgo + ' / ' + o + ' []') 
 
 
-class CSVFile():
-    """A wrapper class to read and manipulate data from output produced by make_csv.sh"""
-
-    def __init__(self, filepath):
-        self.df = pandas.read_csv(
-            filepath, sep=",", engine="c", index_col=False)
-
-    def __str__(self):
-        return str(self.df.columns)
-
-    def getdata(self, x_axis, y_axis, filter_col, filter_with):
-        data = self.df.copy()  # Make a copy of the data frame to return.
-        for o, w in zip(filter_col, filter_with):
-            # Filter the data for the rows matching the column.
-            data = data[data[o] == w]
-        x = sorted(data[x_axis].unique())  # Get the unique x axis values
-        y = data[y_axis].to_numpy()  # Get corresponding y values
-        return {'x': x, 'y': y}
-
-
-def plot_exp0(dirpath, ds, max_key, ylabel=False, legend=False):
+def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
     # Experiment 1 demonstrates performance as the workload distribution changes.
 
-    # Create the required .csv files if there are none, then plot the data structure.
-    csvfile = ds + '.csv'
-    if not os.path.exists(os.path.join(os.path.join(dirpath, 'exp0'), csvfile)):
-        print('GENERATING .csv FILE FOR ' + ds + '...')
-        subprocess.call('./make_csv.sh ' + os.path.join(dirpath, 'exp0') + ' ' +
-                        str(ntrials) + ' ' + ds, shell=True)
+    # Create the required .csv files if there are none, then plot the data structure.ß
 
-    print('GENERATING PLOT FOR ' + ds + '...')
-    csv = CSVFile(os.path.join(os.path.join(dirpath, 'exp0'), csvfile))
+    reset_base_config()
     x_axis = 'rq_size'
     y_axis = 'tot_thruput'
     nthreads = [24, 48, 96, 144, 192]
@@ -114,79 +144,132 @@ def plot_exp0(dirpath, ds, max_key, ylabel=False, legend=False):
     data = {}
     ignore = ['ubundle']
     algos = [k for k in plotconfig.keys() if k not in ignore]
-    for algo in algos:
-        data[algo] = {}
-        for t in nthreads:
-            data[algo][t] = csv.getdata(x_axis, y_axis, [
-                'list', 'max_key', 'wrk_threads'], [ds + '-' + algo, max_key, t])
+    for ds in dss:
+        csvfile = CSVFile.get_or_gen_csv(
+            os.path.join(dirpath, 'exp0'), ds, ntrials)
+        csv = CSVFile(csvfile)
+        data[ds] = {}
+        for algo in algos:
+            data[ds][algo] = {}
+            for t in nthreads:
+                data[ds][algo][t] = csv.getdata(x_axis, y_axis, [
+                    'list', 'max_key', 'wrk_threads'], [ds + '-' + algo, max_key, t])
+                print(algo + '=' + str(data[ds][algo][t]['y']))
 
     # Calculate speedup.
     speedup = {}
     overalgo = 'unsafe'
-    for algo in algos:
-        if algo == overalgo:
-            continue
-        speedup[algo] = {}
-        for t in nthreads:
-            speedup[algo][t] = {}
-            if data[algo][t]['y'].size == 0:
-                speedup[algo][t]['x'] = []
-                speedup[algo][t]['y'] = []
+    for ds in dss:
+        speedup[ds] = {}
+        for algo in algos:
+            if algo == overalgo:
                 continue
-            speedup[algo][t]['x'] = data[overalgo][t]['x']
-            try:
-                speedup[algo][t]['y'] = data[algo][t]['y'] / \
-                    data[overalgo][t]['y']
-            except:
-                shape_ = data[overalgo][t]['y'].shape
-                speedup[algo][t]['y'] = np.zeros(shape=shape_)
-            # speedup[algo][rq_size]['y'] =  data['lbundle'][rq_size]['y'][::2] / data[algo][rq_size]['y'][::2]
+            speedup[ds][algo] = {}
+            for t in nthreads:
+                speedup[ds][algo][t] = {}
+                if data[ds][algo][t]['y'].size == 0:
+                    speedup[ds][algo][t]['x'] = []
+                    speedup[ds][algo][t]['y'] = []
+                    continue
+                speedup[ds][algo][t]['x'] = data[ds][overalgo][t]['x']
+                try:
+                    speedup[ds][algo][t]['y'] = data[ds][algo][t]['y'] / \
+                        data[ds][overalgo][t]['y']
+                except:
+                    shape_ = data[ds][overalgo][t]['y'].shape
+                    speedup[ds][algo][t]['y'] = np.zeros(shape=shape_)
+                # speedup[algo][rq_size]['y'] =  data['lbundle'][rq_size]['y'][::2] / data[algo][rq_size]['y'][::2]
 
     # Plot speedup.
-    x_axis_layout_['title']['text'] = 'Range Query Size'
-    y_axis_layout_['title']['text'] = 'Relative Throughput' if ylabel else ''
+    # x_axis_layout_['title']['text'] = 'Range Query Size'
+    # y_axis_layout_['title']['text'] = 'Relative Throughput' if ylabel else ''
+    y_axis_layout_['dtick'] = .25
+    # y_axis_layout_['side'] = 'right'
+
     legend_layout_ = {'font': legend_font_,
-                      'orientation': 'h', 'x': 0, 'y': 1.15, 'traceorder': 'grouped', 'tracegroupgap': 0} if legend else {}
+                      'orientation': 'v', 'x': 0, 'y': 1.15, 'traceorder': 'grouped', 'tracegroupgap': 0} if legend else {}
+
     reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
                        'x1': len(nthreads)+0.6, 'y1': 1, 'line': {'width': 8, 'color': 'black'}, 'layer': 'below'}
+
     box1_ = {'type': 'rect', 'yref': 'paper', 'x0': .5, 'x1': 1.5, 'y0': 0, 'y1': 1,
              'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
     box2_ = {'type': 'rect', 'yref': 'paper', 'x0': 2.5, 'x1': 3.5, 'y0': 0, 'y1': 1,
              'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
     box3_ = {'type': 'rect', 'yref': 'paper', 'x0': 4.5, 'x1': 5.5, 'y0': 0, 'y1': 1,
              'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    layout_['shapes'] = [reference_line_, box1_, box2_, box3_]
+
+    layout_['shapes'] = [box1_, box2_, box3_]
     layout_['legend'] = legend_layout_
-    fig = go.Figure(layout=layout_)
-    for algo in algos:
-        if algo == overalgo:
-            continue
-        opacity_ = 1
-        for t in nthreads:
-            x_ = speedup[algo][t]['x']
-            y_ = speedup[algo][t]['y']
-            color_ = update_opacity(plotconfig[algo]['color'], opacity_)
-            marker_ = {'color': color_, 'line': {
-                'width': 1.5, 'color': 'black'}}
-            fig.add_bar(x=x_, y=y_, marker=marker_,
-                        name='<b>' + plotconfig[algo]['label'] + ' (n=' + str(t) + ')</b>', legendgroup=t, showlegend=legend)
-            opacity_ -= 1.0 / (len(u_rates) + 1)
-    fig.update_layout(barmode='group', bargap=0.05, bargroupgap=0.01)
+    layout_['height'] = 1000
+    layout_['width'] = 2200
+
+    # fig = go.Figure(layout=layout_)
+    fig = plotly.subplots.make_subplots(
+        rows=len(dss), cols=2, column_widths=[0.03, 0.97],
+        specs=[[{'rowspan': 2}, {}],
+               [None, {}]], shared_xaxes=True)
+    curr_row_ = 1
+    legend_shown_ = False  # When set to true no legend is shown.
+    for ds in dss:
+        showlegend_ = not legend_shown_ and ds != 'skiplistlock'
+        for algo in algos:
+            if algo == overalgo:
+                continue
+            opacity_ = 1
+            for t in nthreads:
+                x_ = speedup[ds][algo][t]['x']
+                y_ = speedup[ds][algo][t]['y']
+                color_ = update_opacity(plotconfig[algo]['color'], opacity_)
+                marker_ = {'color': color_, 'line': {
+                    'width': 1.5, 'color': 'black'}}
+                fig.add_bar(x=x_, y=y_, marker=marker_,
+                            name='<b>' +
+                            plotconfig[algo]['label'] +
+                            ' (n=' + str(t) + ')</b>',
+                            legendgroup=ds, showlegend=showlegend_,
+                            row=curr_row_, col=2)
+                opacity_ -= 1.0 / (len(nthreads) + 1)
+        curr_row_ += 1
+        if showlegend_:
+            legend_shown_ = True
+
+    fig.update_xaxes(x_axis_layout_)
+    fig.update_xaxes(title_text='Range Query Size', row=2, col=2)
+    fig.update_yaxes(y_axis_layout_)
+    # fig.update_yaxes(title_text='Skip list', row=1, col=2)
+    # fig.update_yaxes(title_text='Citrus tree', row=2, col=2)
+
+    # fig.update_layout(layout_)
+    annotations_ = [
+        dict(
+            x=0,
+            y=0.5,
+            showarrow=False,
+            text="Relative Throughput",
+            textangle=-90,
+            font=axis_font_,
+            xref="paper",
+            yref="paper"
+        )
+    ]
+    fig.update_layout(layout_)
+    fig.update_layout(barmode='group', bargap=0.05,
+                      bargroupgap=0.01, annotations=annotations_)
+    # fig.write_image('./figs/rqsize.pdf')
     fig.show()
 
 
-def plot_exp1(dirpath, ds, max_key, ylabel=False, legend=False)
+def plot_exp1(dirpath, ds, max_key, ylabel=False, legend=False):
     # Experiment 1 demonstrates performance as the workload distribution changes.
 
     # Create the required .csv files if there are none, then plot the data structure.
-    csvfile = ds + '.csv'
-    if not os.path.exists(os.path.join(os.path.join(dirpath, 'exp1'), csvfile)):
-        print('GENERATING .csv FILE FOR ' + ds + '...')
-        subprocess.call('./make_csv.sh ' + os.path.join(dirpath, 'exp1') + ' ' +
-                        str(ntrials) + ' ' + ds, shell=True)
+    reset_base_config()
+    csvfile = CSVFile.get_or_gen_csv(
+        os.path.join(dirpath, 'exp1'), ds, ntrials)
 
     print('GENERATING PLOT FOR ' + ds + '...')
-    csv = CSVFile(os.path.join(os.path.join(dirpath, 'exp1'), csvfile))
+    csv = CSVFile(csvfile)
     x_axis = 'u_rate'
     y_axis = 'tot_thruput'
     nthreads = [24, 48, 96, 144, 192]
@@ -209,8 +292,9 @@ def plot_exp1(dirpath, ds, max_key, ylabel=False, legend=False)
         if algo == overalgo:
             continue
         speedup[algo] = {}
-        avgs = np.zeros(shape=len(data[overalgo][nthreads[0]]['x']))
-        maxes = np.zeros(shape=len(data[overalgo][nthreads[0]]['x']))
+        len_ = len(data[overalgo][nthreads[0]]['x'])
+        avgs = np.zeros(shape=len_)
+        maxes = np.zeros(shape=len_)
         for t in nthreads:
             speedup[algo][t] = {}
             if data[algo][t]['y'].size == 0:
@@ -218,10 +302,14 @@ def plot_exp1(dirpath, ds, max_key, ylabel=False, legend=False)
                 speedup[algo][t]['y'] = []
                 continue
             speedup[algo][t]['x'] = data[overalgo][t]['x']
+            speedup[algo][t]['y'] = np.zeros(shape=len_, dtype=np.float64)
             try:
-                speedup[algo][t]['y'] = data[overalgo][t]['y'] / \
-                    data[algo][t]['y']
-            except:
+                denom_ = data[overalgo][t]['y']
+                numer_ = data[algo][t]['y']
+                speedup[algo][t]['y'] = np.divide(numer_, denom_)
+                print(algo + ' ' + str(speedup[algo][t]['y']))
+            except Exception as e:
+                print(e)
                 shape_ = data[overalgo][t]['y'].shape
                 speedup[algo][t]['y'] = np.zeros(shape=shape_)
 
@@ -258,21 +346,18 @@ def plot_exp1(dirpath, ds, max_key, ylabel=False, legend=False)
                 'width': 1.5, 'color': 'black'}}
             fig.add_bar(x=x_, y=y_, marker=marker_,
                         name=algo + ' (n=' + str(t) + ')', showlegend=legend)
-            opacity_ -= 1.0 / (len(u_rates) + 1)
+            opacity_ -= 1.0 / (len(nthreads) + 1)
     fig.update_layout(barmode='group', bargap=0.05, bargroupgap=0.01)
-    # fig.show()
+    fig.show()
 
 
 def plot_exp2(dirpath, ds, max_key, include_unsafe=True):
     # Experiment 2 demonstrates performance as the workload distribution changes, with primitive operations 1:1 for contains and updates.
 
     # Create the required .csv files if there are none, then plot the data structure.
-    csvfile = ds + '.csv'
-    if not os.path.exists(os.path.join(dirpath, csvfile)):
-        print('GENERATING .csv FILE FOR ' + ds + '...')
-        subprocess.call('./make_csv.sh ' + dirpath + ' ' +
-                        str(ntrials) + ' ' + ds, shell=True)
-
+    reset_base_config()
+    csvfile = CSVFile.get_or_gen_csv(
+        os.path.join(dirpath, 'exp2'), ds, ntrials)
     print('GENERATING PLOT FOR ' + ds + '...')
     csv = CSVFile(os.path.join(dirpath, csvfile))
     x_axis = 'wrk_threads'
@@ -311,56 +396,144 @@ def plot_exp2(dirpath, ds, max_key, include_unsafe=True):
     fig.show()
 
 
-def plot_memreclamation(dirpath, nofreedir, freedir, ds, max_key):
-    # 'freedir' contains directories each with a different delay configuration.
-    # Create the required .csv files if there are none, then plot the data structure.
+def plot_extremes(dirpath, ds, max_key, legend=False):
+    reset_base_config()
+    csvfile = CSVFile.get_or_gen_csv(
+        os.path.join(dirpath, 'exp1'), ds, ntrials)
+    csv = CSVFile(os.path.join(dirpath, csvfile))
+
+    # Column names to use for axes.
     x_axis = 'wrk_threads'
     y_axis = 'tot_thruput'
-    u_rates = [0, 10, 50, 90, 100]
-    # Accumulate the data for each algorithm and the corresponding
+    filter_cols = ['list', 'max_key', 'u_rate']
+    u_rates = [0.0, 100.0]
+
+    # Read in data from the .csv file
     data = {}
-    for d in delayconfig.keys():
-        if d != 'nofree':
-            csvdir = os.path.join(dirpath, freedir, d, 'exp1')
-            csvfile = os.path.join(csvdir, ds + '.csv')
-        else:
-            csvdir = os.path.join(dirpath, nofreedir, 'exp1')
-            csvfile = os.path.join(csvdir, ds + '.csv')
-        temp = os.path.join(dirpath, csvfile)
-        if not os.path.exists(temp):
-            print('GENERATING .csv FILE FOR ' + ds + '...')
-            subprocess.call('./make_csv.sh ' + csvdir + ' ' +
-                            str(ntrials) + ' ' + ds, shell=True)
-
-        csv = CSVFile(os.path.join(dirpath, csvfile))
-        x_axis = 'wrk_threads'
-        y_axis = 'tot_thruput'
-        u_rates = [0, 10, 50, 90, 100]
-        # Accumulate the data for each algorithm and the corresponding
-        data[d] = {}
+    ignore = ['ubundle']  # Don't include these in result set.
+    algos = [k for k in plotconfig.keys() if k not in ignore]
+    for a in algos:
+        data[a] = {}
         for u in u_rates:
-                data[d][u] = csv.getdata(x_axis, y_axis, [
-                    'list', 'max_key', 'u_rate'], [ds + '-lbundle', max_key, u])
+            filter_with = [ds+'-'+a, max_key, u]
+            data[a][u] = csv.getdata(
+                x_axis, y_axis, filter_col=filter_cols, filter_with=filter_with)
 
-    speedup = {}
-    for d in data.keys():
-        speedup[d] = {}
+    # Generate the plot layout.
+    x_axis_layout_['title']['text'] = '# Threads'
+    x_axis_layout_['showticklabels'] = True
+    y_axis_layout_['dtick'] = 30000000
+    legend_layout_ = {'font': legend_font_,
+                      'orientation': 'h', 'x': 0, 'y': 1.25}
+    layout_['legend'] = legend_layout_
+    layout_['autosize'] = False
+    layout_['width'] = 1500
+    layout_['height'] = 850
+
+    # Plot data.
+    fig = plotly.subplots.make_subplots(specs=[[{"secondary_y": True}]])
+    fig.update_layout(layout_)
+    fig.update_yaxes(y_axis_layout_)
+    fig.update_yaxes(title_text='Throughput (ops/s)', secondary_y=False)
+    for u in u_rates:
+        for a in algos:
+            # Ignore anything but the interesting ones.
+            if u == 0.0 and a not in ['unsafe', 'rlu', 'lbundle']:
+                continue
+            elif u == 100.0 and a not in ['unsafe', 'lockfree', 'lbundle']:
+                continue
+            symbol_ = plotconfig[a]['symbol']
+            line_ = {'width': 10}
+            if u == 0.0:
+                name_ = '<b>' + plotconfig[a]['label'] + '(100% U)</b>'
+                color_ = COLORS[0]
+                marker_ = {'symbol': symbol_, 'color': color_, 'size': 40, 'line': {
+                    'width': 5, 'color': 'black'}}
+                fig.add_scatter(x=data[a][u]['x'], y=data[a][u]['y'], name=name_,
+                                marker=marker_, line=line_, showlegend=legend)
+            elif u == 100.0:
+                name_ = '<b>' + plotconfig[a]['label'] + '(100% RQ)</b>'
+                color_ = COLORS[1]
+                marker_ = {'symbol': symbol_, 'color': color_, 'size': 40, 'line': {
+                    'width': 5, 'color': 'black'}}
+                fig.add_scatter(x=data[a][u]['x'], y=data[a][u]['y'], name=name_,
+                                marker=marker_, line=line_, showlegend=legend, secondary_y=True)
+    fig.show()
+    # fig.write_image('./figs/extremes.pdf')
+
+
+def plot_extremes2(dirpath, ds, max_key, legend=False):
+    reset_base_config()
+    csvfile = CSVFile.get_or_gen_csv(
+        os.path.join(dirpath, 'exp1'), ds, ntrials)
+    csv = CSVFile(os.path.join(dirpath, csvfile))
+
+    # Column names to use for axes.
+    x_axis = 'wrk_threads'
+    y_axis = 'tot_thruput'
+    filter_cols = ['list', 'max_key', 'u_rate', 'wrk_threads']
+    u_rates = [0.0, 100.0]
+
+    # Read in data from the .csv file
+    data = {}
+    ignore = ['ubundle']  # Don't include these in result set.
+    algos = [k for k in plotconfig.keys() if k not in ignore]
+    for a in algos:
+        data[a] = {}
         for u in u_rates:
-            speedup[d][u] = data['nofree'][u]['y'] / \
-                data[d][u]['y']
+            filter_with = [ds+'-'+a, max_key, u, 96]
+            data[a][u] = csv.getdata(
+                x_axis, y_axis, filter_col=filter_cols, filter_with=filter_with)
 
-    for d in speedup.keys():
-      print(d)
-      for u in u_rates:
-        print(np.average(speedup[d][u]))
+    # Generate the plot layout.
+    x_axis_layout_['title']['text'] = '# Threads'
+    x_axis_layout_['showticklabels'] = True
+    y_axis_layout_['dtick'] = 30000000
+    legend_layout_ = {'font': legend_font_,
+                      'orientation': 'h', 'x': 0, 'y': 1.25}
+    layout_['legend'] = legend_layout_
+    layout_['autosize'] = False
+    layout_['width'] = 1500
+    layout_['height'] = 850
+
+    # Plot data.
+    fig = plotly.subplots.make_subplots(rows=1, cols=2)
+    fig.update_layout(layout_)
+    fig.update_yaxes(y_axis_layout_)
+    fig.update_yaxes(title_text='Throughput (ops/s)', row=1, col=1)
+    for u in u_rates:
+        for a in algos:
+            # Ignore anything but the interesting ones.
+            if u == 0.0 and a not in ['unsafe', 'rlu', 'lbundle']:
+                continue
+            elif u == 100.0 and a not in ['unsafe', 'lockfree', 'lbundle']:
+                continue
+            symbol_ = plotconfig[a]['symbol']
+            line_ = {'width': 10}
+            if u == 0.0:
+                name_ = '<b>' + plotconfig[a]['label'] + '(100% U)</b>'
+                color_ = plotconfig[a]['color']
+                marker_ = {'color': color_}
+                fig.add_bar(x=[name_], y=data[a][u]['y'], name=name_,
+                            showlegend=legend, marker=marker_, row=1, col=1)
+            elif u == 100.0:
+                name_ = '<b>' + plotconfig[a]['label'] + '(100% RQ)</b>'
+                color_ = plotconfig[a]['color']
+                marker_ = {'color': color_}
+                fig.add_bar(x=[name_], y=data[a][u]['y'], name=name_,
+                            showlegend=legend, marker=marker_, row=1, col=2)
+    fig.show()
+    # fig.write_image('./figs/extremes.pdf')
 
 
 def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
+    reset_base_config()
     csv = CSVFile(os.path.join(dirpath, 'data.csv'))
     data = {}
     for algo in plotconfig.keys():
         data[algo] = csv.getdata('nthreads', 'ixThroughput', [
                                  'rqalg', 'datastructure'], [plotconfig[algo]['macrobench'], ds])
+        data[algo]['y'] = data[algo]['y'] / 1000000  # Normalizes throughput.
 
     speedup = {}
     overalgo = 'unsafe'
@@ -381,54 +554,42 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
             speedup[algo]['y'] = np.zeros(shape=shape_)
 
     x_axis_layout_['title']['text'] = '# Threads'
-    x_axis_layout_['title']['font']['size'] = 58
+    # x_axis_layout_['title']['font']['size'] = 58
     y_axis_layout_[
-        'title']['text'] = 'Total Throughput (ops/s)' if ylabel else ''
-    y_axis_layout_['title']['font']['size'] = 58
-    legend_layout_ = {'font': legend_font_, 'orientation': 'h',
-                      'x': 0, 'y': 1.3, 'font': {'size': 28}} if legend else {}
+        'title']['text'] = 'Throughput (ops/s)' if ylabel else ''
+    legend_layout_ = {'font': legend_font_, 'orientation': 'v',
+                      'x': 0, 'y': 1.3}
+    legend_layout_['font']['size'] = 40
     layout_['legend'] = legend_layout_
+    layout_['width'] = 850
+    layout_['height'] = 700
+
     fig = go.Figure(layout=layout_)
     for algo in plotconfig.keys():
         symbol_ = plotconfig[algo]['symbol']
-        line_ = {'color': plotconfig[algo]['color']}
+        line_ = {'width': 10, 'color': plotconfig[algo]['color']}
         opacity_ = 1
         x_ = data[algo]['x']
         y_ = data[algo]['y']
         marker_ = {'symbol': symbol_,
-                   'opacity': opacity_, 'size': 40, 'line_width': 2}
+                   'opacity': opacity_, 'size': 40,
+                   'line': {'color': 'black', 'width': 5}}
+        name_ = '<b>' + plotconfig[algo]['label'] + '</b>'
         fig.add_trace(go.Scatter(
-            x=x_, y=y_, name=plotconfig[algo]['label'], mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
-        # Update opacity to distiguish range query lengths.
-    fig.show()
+            x=x_[0::2], y=y_[0::2], name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
 
-    # Plot speedup.
-    # reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
-    #                    'x1': 4.6, 'y1': 1, 'line': {'width': 8}, 'layer': 'below'}
-    # box1_ = {'type': 'rect', 'yref': 'paper', 'x0': .5, 'x1': 1.5, 'y0': 0, 'y1': 1,
-    #          'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    # box2_ = {'type': 'rect', 'yref': 'paper', 'x0': 2.5, 'x1': 3.5, 'y0': 0, 'y1': 1,
-    #          'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    # layout_ = {'xaxis': x_axis_layout_,
-    #            'yaxis': y_axis_layout_, 'shapes': [reference_line_, box1_, box2_]}
-    # fig = go.Figure(layout=layout_)
-    # for algo in speedup.keys():
-    #     x_ = [str(i) for i in speedup[algo]['x']]
-    #     y_ = speedup[algo]['y']
-    #     marker_ = {'color': plotconfig[algo]['color'], 'line': {
-    #         'width': 1.5, 'color': 'black'}}
-    #     fig.add_bar(x=x_, y=y_, marker=marker_,
-    #                 name=algo)
-    # fig.update_layout(barmode='group', bargap=0.05, bargroupgap=0.01)
     # fig.show()
+    fig.write_image('./figs/'+ds+'-macrobench.pdf')
 
 
 def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
+    reset_base_config()
     data = {}
     x_axis = 'u_rate'
     y_axis = 'tot_thruput'
     nthreads = [96]
     for c in relaxconfig.keys():
+        # TODO(jjn): Update to use new utils.
         csvfile = os.path.join(c, 'exp1/'+ds+'.csv')
         if not os.path.exists(os.path.join(dirpath, csvfile)):
             print('GENERATING .csv FILE FOR ' + ds + '...')
@@ -465,11 +626,12 @@ def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
                 speedup[c][t]['y'] = np.zeros(shape=shape_)
 
     x_axis_layout_['title']['text'] = '% Updates'
-    y_axis_layout_['title']['text'] = 'Relative Throughput' if ylabel else ''
-    x_axis_layout_['title']['font']['size'] =54 
-    x_axis_layout_['tickfont']['size'] =54 
-    y_axis_layout_['title']['font']['size'] =54 
-    y_axis_layout_['tickfont']['size'] =54 
+    y_axis_layout_['title']['text'] = 'Rel. Throughput' if ylabel else ''
+    x_axis_layout_['title']['font']['size'] = 50
+    x_axis_layout_['tickfont']['size'] = 50
+    y_axis_layout_['title']['font']['size'] = 50
+    y_axis_layout_['tickfont']['size'] = 50
+    y_axis_layout_['nticks'] = 4
     reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
                        'x1': 3.6, 'y1': 1, 'line': {'width': 8, 'color': 'black'}, 'layer': 'below'}
     box1_ = {'type': 'rect', 'yref': 'paper', 'x0': .5, 'x1': 1.5, 'y0': 0, 'y1': 1,
@@ -477,9 +639,13 @@ def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
     box2_ = {'type': 'rect', 'yref': 'paper', 'x0': 2.5, 'x1': 3.5, 'y0': 0, 'y1': 1,
              'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
     legend_layout_ = {'font': legend_font_,
-                      'orientation': 'v', 'x': 0, 'y': 1.15} if legend else {}
+                      'orientation': 'h', 'x': 0, 'y': 1.15} if legend else {}
+    # legend_layout_['font']['size'] = 50
     layout_['shapes'] = [reference_line_, box1_, box2_]
     layout_['legend'] = legend_layout_
+    layout_['width'] = 1400 
+    layout_['height'] = 550
+
     fig = go.Figure(layout=layout_)
     i = 0
     for algo in speedup.keys():
@@ -497,13 +663,15 @@ def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
                         name=name_, showlegend=legend)
         i += 1
     fig.update_layout(barmode='group', bargap=0.05, bargroupgap=0.01)
-    fig.show()
+    fig.write_image('./figs/'+ds+'relax.pdf')
+    # fig.show()
 
 
 def plot_ubundle(dirpath, ds, max_key):
-        # Experiment 1 demonstrates performance as the workload distribution changes.
+    # Experiment 1 demonstrates performance as the workload distribution changes.
 
     # Create the required .csv files if there are none, then plot the data structure.
+    reset_base_config()
     algos = ['lbundle', 'ubundle']
     csvfile = ds + '.csv'
     if not os.path.exists(os.path.join(os.path.join(dirpath, 'exp1'), csvfile)):
@@ -589,7 +757,7 @@ def plot_ubundle(dirpath, ds, max_key):
     fig = go.Figure(layout=layout_)
     i = 0
     for t in nthreads:
-        opacity_ = 1 - (float(i) / (len(u_rates) + 1))
+        opacity_ = 1 - (float(i) / (len(nthreads) + 1))
         for algo in speedup.keys():
             # x_ = speedup[algo][u]['x']
             x_ = speedup[algo][t]['x']
@@ -604,27 +772,100 @@ def plot_ubundle(dirpath, ds, max_key):
     fig.show()
 
 
+def plot_memreclamation(dirpath, nofreedir, freedir, ds, max_key):
+    # 'freedir' contains directories each with a different delay configuration.
+    # Create the required .csv files if there are none, then plot the data structure.
+    reset_base_config()
+    x_axis = 'wrk_threads'
+    y_axis = 'tot_thruput'
+    u_rates = [0, 10, 50, 90, 100]
+    # Accumulate the data for each algorithm and the corresponding
+    data = {}
+    for d in delayconfig.keys():
+        if d != 'nofree':
+            csvdir = os.path.join(dirpath, freedir, d, 'exp1')
+            csvfile = os.path.join(csvdir, ds + '.csv')
+        else:
+            csvdir = os.path.join(dirpath, nofreedir, 'exp1')
+            csvfile = os.path.join(csvdir, ds + '.csv')
+        temp = os.path.join(dirpath, csvfile)
+        if not os.path.exists(temp):
+            print('GENERATING .csv FILE FOR ' + ds + '...')
+            subprocess.call('./make_csv.sh ' + csvdir + ' ' +
+                            str(ntrials) + ' ' + ds, shell=True)
+
+        csv = CSVFile(temp)
+        x_axis = 'wrk_threads'
+        y_axis = 'tot_thruput'
+        u_rates = [0.0, 10.0, 50.0, 90.0, 100.0]
+        # Accumulate the data for each algorithm and the corresponding
+        data[d] = {}
+        for u in u_rates:
+            data[d][u] = csv.getdata(x_axis, y_axis, [
+                'list', 'max_key', 'u_rate'], [ds + '-lbundle', max_key, u])
+
+    speedup = {}
+    for d in data.keys():
+        speedup[d] = {}
+        for u in u_rates:
+            speedup[d][u] = data['nofree'][u]['y'] / \
+                data[d][u]['y']
+
+    for d in speedup.keys():
+        print(d)
+        for u in u_rates:
+            print(np.average(speedup[d][u]))
+
 if __name__ == "__main__":
-            # Experiment 0 features an even distribution of updates and range queries, with varied RQ lengths.
+    # Experiment 0 features an even distribution of updates and range queries, with varied RQ lengths.
     rootdir = os.path.join(rootdir, machine)
     dirpath = os.path.join(rootdir, 'microbench/nofree')
 
+    if not os.path.exists('./figs'):
+        os.mkdir('./figs')
+
+    # plot_threadcount(dirpath, 'citrus', 100000, 'rlu')
+    # plot_threadcount(dirpath, 'citrus', 100000, 'lbundle')
+    # plot_threadcount(dirpath, 'citrus', 100000, 'lockfree')
+
+    plot_threadcount_all(dirpath, 'lazylist', 10000,
+                         0.0, ylabel=False, legend=False)
+    plot_threadcount_all(dirpath, 'lazylist', 10000, 2.0, ylabel=True, legend=False)
+    plot_threadcount_all(dirpath, 'lazylist', 10000, 10.0, ylabel=False, legend=False)
+    plot_threadcount_all(dirpath, 'lazylist', 10000, 50.0, ylabel=False, legend=False)
+    plot_threadcount_all(dirpath, 'lazylist', 10000, 90.0, ylabel=False, legend=False)
+
+    # plot_threadcount_all(dirpath, 'skiplistlock', 100000,
+    #                      0.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 2.0, ylabel=True, legend=False)
+    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 10.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 50.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 90.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'citrus', 100000, 0.0, False, True)
+    # plot_threadcount_all(dirpath, 'citrus', 100000,
+    #                      0.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'citrus', 100000, 2.0, ylabel=True, legend=False)
+    # plot_threadcount_all(dirpath, 'citrus', 100000, 10.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'citrus', 100000, 50.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'citrus', 100000, 90.0, ylabel=False, legend=False)
+    # plot_threadcount_all(dirpath, 'citrus', 100000, 100.0, ylabel=True, legend=True)
+
     # EXPERIMENT 0.
-    # plot_exp0(dirpath, 'lazylist', 10000, legend=True)
-    # plot_exp0(dirpath, 'skiplistlock', 100000)
-    # plot_exp0(dirpath, 'citrus', 100000)
+    # plot_exp0(dirpath, ['skiplistlock', 'citrus'], 100000, True, True)
 
     # EXPERIMENT 1.
-    plot_exp1(dirpath, 'lazylist', 10000, True)
-    plot_exp1(dirpath, 'skiplistlock', 100000)
-    plot_exp1(dirpath, 'citrus', 100000)
+    # plot_exp1(dirpath, 'lazylist', 10000, True)
+    # plot_exp1(dirpath, 'skiplistlock', 100000)
+    # plot_exp1(dirpath, 'citrus', 100000)
 
     # OTHERS
     # plot_memreclamation(os.path.join(rootdir, 'microbench'),
-    #                     'nofree', 'free', 'lazylist', 10000)
-    # plot_macrobench(os.path.join(
-    #     rootdir, 'macrobench', 'rq100'), 'SKIPLISTLOCK', ylabel=True, legend=True)
-    plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'), 'CITRUS', ylabel=True, legend=True)
-    # rootdir, machine), 'macrobench'), 'CITRUS')
-    # plot_relaxation(os.path.join(dirpath, 'exp3'), 'skiplistlock', 100000, ylabel=True, legend=True)
+    #                     'nofree', 'free', 'skiplistlock', 100000)
+    # plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
+    #                 'SKIPLISTLOCK', ylabel=True, legend=False)
+    # plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
+    #                 'CITRUS', ylabel=False, legend=False)
+    # plot_relaxation(os.path.join(dirpath, 'relax'), 'skiplistlock', 100000, ylabel=True, legend=False)
     # plot_ubundle(dirpath, 'skiplistlock', 100000)
+
+    # plot_extremes2(dirpath, 'citrus', 100000, True)
