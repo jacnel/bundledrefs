@@ -1,81 +1,38 @@
 import numpy as np
 import plotly
 import plotly.graph_objects as go
+from plotly import subplots
 from plot_util import *
+import argparse
+
+## The following is necessary to get plotly's export feature to play nicely with Anaconda.
+plotly.io.orca.config.executable = '/usr/local/anaconda3/envs/bundledrefs/bin/orca'
 
 
-def plot_threadcount(dirpath, ds, max_key, algo, ylabel=False, xlabel=True, legend=False):
+def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=False, save=False):
     """ Generates a plot showing throughput as a function of number of threads
         for the given data structure. """
     reset_base_config()
     csvfile = CSVFile.get_or_gen_csv(
-        os.path.join(dirpath, 'exp1'), ds, ntrials)
+        os.path.join(dirpath, 'workloads'), ds, ntrials)
     csv = CSVFile(csvfile)
 
-    # Provide column labels for desired x and y axis
-    x_axis = 'wrk_threads'
-    y_axis = 'tot_thruput'
-    u_rates = [10.0, 50.0]  # Update rate to plot
-
-    # Init data store
-    data = {}
-
-    # Read in data for each algorithm
-    for u in u_rates:
-        data[u] = csv.getdata(x_axis, y_axis, ['list', 'max_key', 'u_rate'], [
-                              ds+'-'+algo, max_key, u])
-
-    # Plot layout configuration.∏
-    x_axis_layout_['title']['text'] = '# Threads'
-    y_axis_layout_['title']['text'] = 'Relative Throughput' if ylabel else ''
-    legend_layout_ = {'font': legend_font_,
-                      'orientation': 'h', 'x': 0, 'y': 1.15, 'traceorder': 'grouped', 'tracegroupgap': 0} if legend else {}
-    # reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
-    #                    'x1': len(nthreads)+0.6, 'y1': 1, 'line': {'width': 8, 'color': 'black'}, 'layer': 'below'}
-    box1_ = {'type': 'rect', 'yref': 'paper', 'x0': .5, 'x1': 1.5, 'y0': 0, 'y1': 1,
-             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    box2_ = {'type': 'rect', 'yref': 'paper', 'x0': 2.5, 'x1': 3.5, 'y0': 0, 'y1': 1,
-             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    box3_ = {'type': 'rect', 'yref': 'paper', 'x0': 4.5, 'x1': 5.5, 'y0': 0, 'y1': 1,
-             'layer': 'below', 'line': {'width': 0}, 'fillcolor': 'slategray', 'opacity': 0.25}
-    # layout_['shapes'] = [reference_line_, box1_, box2_, box3_]
-    layout_['legend'] = legend_layout_
-
-    fig = go.Figure(layout=layout_)
-    for u in u_rates:
-        # symbol_ = plotconfig[a]['symbol']
-        # color_ = update_opacity(plotconfig[a]['color'], 1)
-        marker_ = {'size': 40, 'line': {
-            'width': 1.5, 'color': 'black'}, 'line_width': 3}
-        fig.add_scatter(x=data[u]['x'], y=data[u]['y'],
-                        name=algo+'-'+str(u), marker=marker_)
-    fig.show()
-
-
-def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, legend=False):
-    """ Generates a plot showing throughput as a function of number of threads
-        for the given data structure. """
-    reset_base_config()
-    csvfile = CSVFile.get_or_gen_csv(
-        os.path.join(dirpath, 'exp4'), ds, ntrials)
-    csv = CSVFile(csvfile)
-
-    # Provide column labels for desired x and y axis
+    ## Provide column labels for desired x and y axis
     x_axis = 'wrk_threads'
     y_axis = 'tot_thruput'
 
-    # Init data store
+    ## Init data store
     data = {}
 
-    # Ignores rows in .csv with the following label
+    ## Ignores rows in .csv with the following label
     ignore = ['ubundle']
     algos = [k for k in plotconfig.keys() if k not in ignore]
 
-    # Read in data for each algorithm
+    ## Read in data for each algorithm
     for a in algos:
         data[a] = {}
-        data[a] = csv.getdata(x_axis, y_axis, ['list', 'max_key', 'u_rate'], [
-                              ds+'-'+a, max_key, u_rate])
+        data[a] = csv.getdata(x_axis, y_axis, ['list', 'max_key', 'u_rate', 'rq_rate'], [
+                              ds+'-'+a, max_key, u_rate, rq_rate])
         data[a]['y'] = data[a]['y'] / 1000000  # Normalize data
 
     # Plot layout configuration.
@@ -84,7 +41,7 @@ def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, legend=Fals
     x_axis_layout_['nticks'] = 6
     if ylabel:
         y_axis_layout_['title']['text'] = 'Mops/s'
-        y_axis_layout_['title']['font']['size'] = 50 
+        y_axis_layout_['title']['font']['size'] = 50
     else:
         y_axis_layout_['title'] = None
     y_axis_layout_['tickfont']['size'] = 52
@@ -93,8 +50,8 @@ def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, legend=Fals
                       'orientation': 'h', 'x': 0, 'y': 1.15} if legend else {}
     layout_['legend'] = legend_layout_
     layout_['autosize'] = False
-    layout_['width'] = 750 
-    layout_['height'] = 350
+    layout_['width'] = 750
+    layout_['height'] = 550
 
     fig = go.Figure(layout=layout_)
     for a in algos:
@@ -104,24 +61,34 @@ def plot_threadcount_all(dirpath, ds, max_key, u_rate, ylabel=False, legend=Fals
             'width': 5, 'color': 'black'}}
         line_ = {'width': 10}
         name_ = '<b>' + plotconfig[a]['label'] + '</b>'
-        fig.add_scatter(x=data[a]['x'][0::2], y=data[a]['y'][0::2], name=name_,
+        fig.add_scatter(x=data[a]['x'], y=data[a]['y'], name=name_,
                         marker=marker_, line=line_, showlegend=legend)
-    # fig.show()
-    fig.write_image('./figs/'+ds+str(int(u_rate))+'.pdf')
+
+        # Comment the above line and uncomment below to show fewer points per plot.
+        # fig.add_scatter(x=data[a]['x'][0::2], y=data[a]['y'][0::2], name=name_,
+        #                 marker=marker_, line=line_, showlegend=legend)
+
+    if not save:
+        fig.show()
+    else:
+        filename = ds + '_u' + str(u_rate) + '_rq' + str(rq_rate)
+        fig.write_image('./figures/'+filename+'.pdf')
 
     # Print speedup for paper.
     ignore = ['ubundle']
-    testalgo = 'rlu'
-    overalgos = [k for k in plotconfig.keys() if (k not in ignore and k != testalgo)]
+    testalgo = 'unsafe'
+    overalgos = [k for k in plotconfig.keys() if (
+        k not in ignore and k != testalgo)]
     print('Speedup for ' + ds + ' @ ' + str(u_rate) + '% updates')
     for o in overalgos:
         try:
-            print(testalgo +' / ' + o + '\n\t' + str(data[testalgo]['y'][0::2] / data[o]['y'][0::2]))
+            print(testalgo + ' / ' + o + '\n\t' +
+                  str(data[testalgo]['y'][0::2] / data[o]['y'][0::2]))
         except ValueError:
-            print(testalgo + ' / ' + o + ' []') 
+            print(testalgo + ' / ' + o + ' []')
 
 
-def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
+def plot_rq_sizes(dirpath, dss, max_key, ylabel=False, legend=False, save=False):
     # Experiment 1 demonstrates performance as the workload distribution changes.
 
     # Create the required .csv files if there are none, then plot the data structure.ß
@@ -224,11 +191,11 @@ def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
 
     fig.update_xaxes(x_axis_layout_)
     fig.update_xaxes(title_text='Range Query Size', row=2, col=2)
-    fig.update_yaxes(y_axis_layout_)
-    # fig.update_yaxes(title_text='Skip list', row=1, col=2)
-    # fig.update_yaxes(title_text='Citrus tree', row=2, col=2)
 
-    # fig.update_layout(layout_)
+    fig.update_yaxes(y_axis_layout_)
+    fig.update_yaxes(title_text='Skip list', row=1, col=2)
+    fig.update_yaxes(title_text='Citrus tree', row=2, col=2)
+
     annotations_ = [
         dict(
             x=0,
@@ -244,8 +211,11 @@ def plot_exp0(dirpath, dss, max_key, ylabel=False, legend=False):
     fig.update_layout(layout_)
     fig.update_layout(barmode='group', bargap=0.05,
                       bargroupgap=0.01, annotations=annotations_)
-    # fig.show()
-    fig.write_image('./figs/rqsize.pdf')
+
+    if not save:
+        fig.show()
+    else:
+        fig.write_image('./figures/rqsize.pdf')
 
 
 def plot_exp1(dirpath, ds, max_key, ylabel=False, legend=False):
@@ -447,7 +417,7 @@ def plot_extremes(dirpath, ds, max_key, legend=False):
                 fig.add_scatter(x=data[a][u]['x'], y=data[a][u]['y'], name=name_,
                                 marker=marker_, line=line_, showlegend=legend, secondary_y=True)
     fig.show()
-    # fig.write_image('./figs/extremes.pdf')
+    # fig.write_image('./figures/extremes.pdf')
 
 
 def plot_extremes2(dirpath, ds, max_key, legend=False):
@@ -511,10 +481,14 @@ def plot_extremes2(dirpath, ds, max_key, legend=False):
                 fig.add_bar(x=[name_], y=data[a][u]['y'], name=name_,
                             showlegend=legend, marker=marker_, row=1, col=2)
     fig.show()
-    # fig.write_image('./figs/extremes.pdf')
+    # fig.write_image('./figures/extremes.pdf')
 
 
-def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
+def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False):
+    if not os.path.exists(os.path.join(dirpath, 'data.csv')):
+        subprocess.call('./macrobench/make_csv.sh ' + os.path.join(dirpath,
+                                                                   'summary.txt') + ' ' + os.path.join(dirpath, 'data.csv'), shell=True)
+
     reset_base_config()
     csv = CSVFile(os.path.join(dirpath, 'data.csv'))
     data = {}
@@ -545,13 +519,13 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
     x_axis_layout_['tickfont']['size'] = 52
     y_axis_layout_['nticks'] = 6
     y_axis_layout_['tickfont']['size'] = 52
-    if ylabel: 
+    if ylabel:
         y_axis_layout_['title']['text'] = 'Mops/s'
         y_axis_layout_['title']['font']['size'] = 50
     else:
         y_axis_layout_['title'] = None
-    legend_layout_ = {'font': legend_font_, 'orientation': 'v',
-                      'x': 0, 'y': 1.3}
+    legend_layout_ = {'font': legend_font_, 'orientation': 'h',
+                      'x': 0, 'y': 1.15} if legend else {}
     # legend_layout_['font']['size'] = 40
     layout_['legend'] = legend_layout_
     layout_['width'] = 750
@@ -574,8 +548,10 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
         fig.add_trace(go.Scatter(
             x=x_[0::2], y=y_[0::2], name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
 
-    # fig.show()
-    fig.write_image('./figs/'+ds+'-macrobench.pdf')
+    if not save:
+        fig.show()
+    else:
+        fig.write_image('./figures/'+ds+'-macrobench.pdf')
 
 
 def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
@@ -639,7 +615,7 @@ def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
     # legend_layout_['font']['size'] = 50
     layout_['shapes'] = [reference_line_, box1_, box2_]
     layout_['legend'] = legend_layout_
-    layout_['width'] = 1400 
+    layout_['width'] = 1400
     layout_['height'] = 550
 
     fig = go.Figure(layout=layout_)
@@ -659,7 +635,7 @@ def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
                         name=name_, showlegend=legend)
         i += 1
     fig.update_layout(barmode='group', bargap=0.05, bargroupgap=0.01)
-    fig.write_image('./figs/'+ds+'relax.pdf')
+    fig.write_image('./figures/'+ds+'relax.pdf')
     # fig.show()
 
 
@@ -812,56 +788,41 @@ def plot_memreclamation(dirpath, nofreedir, freedir, ds, max_key):
         for u in u_rates:
             print(np.average(speedup[d][u]))
 
+
 if __name__ == "__main__":
-    # Experiment 0 features an even distribution of updates and range queries, with varied RQ lengths.
-    rootdir = os.path.join(rootdir, machine)
-    dirpath = os.path.join(rootdir, 'microbench/nofree')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--save_plots', action='store_true',
+                        default=False, dest='save_plots')
+    parser.add_argument('--microbench', action='store_true', default=True, dest='microbench')
+    parser.add_argument('--macrobench', action='store_true', default=False, dest='macrobench')
+    args = parser.parse_args()
 
-    if not os.path.exists('./figs'):
-        os.mkdir('./figs')
+    print(os.path.curdir)
 
-    # plot_threadcount(dirpath, 'citrus', 100000, 'rlu')
-    # plot_threadcount(dirpath, 'citrus', 100000, 'lbundle')
-    # plot_threadcount(dirpath, 'citrus', 100000, 'lockfree')
+    if not os.path.exists('./figures'):
+        os.mkdir('./figures')
 
-    # plot_threadcount_all(dirpath, 'lazylist', 10000,
-    #                      0.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'lazylist', 10000, 2.0, ylabel=True, legend=False)
-    # plot_threadcount_all(dirpath, 'lazylist', 10000, 10.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'lazylist', 10000, 50.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'lazylist', 10000, 90.0, ylabel=False, legend=False)
+    ## Plot microbench results.
+    if args.microbench:
+        microbench_dir = 'microbench/data'
 
-    # plot_threadcount_all(dirpath, 'skiplistlock', 100000,
-    #                      0.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 2.0, ylabel=True, legend=False)
-    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 10.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 50.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'skiplistlock', 100000, 90.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'citrus', 100000, 0.0, False, True)
-    # plot_threadcount_all(dirpath, 'citrus', 100000,
-    #                      0.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'citrus', 100000, 2.0, ylabel=True, legend=False)
-    # plot_threadcount_all(dirpath, 'citrus', 100000, 10.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'citrus', 100000, 50.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'citrus', 100000, 90.0, ylabel=False, legend=False)
-    # plot_threadcount_all(dirpath, 'citrus', 100000, 100.0, ylabel=True, legend=True)
+        # datastructures = ['lazylist', 'skiplistlock', 'citrus']
+        datastructures = ['skiplistlock']
+        max_keys_dict = {'lazylist': 10000,
+                         'skiplistlock': 100000, 'citrus': 100000}
+        rqrate = 10 
+        urates = [0, 2, 10, 50, 90, 100]
 
-    # EXPERIMENT 0.
-    # plot_exp0(dirpath, ['skiplistlock', 'citrus'], 100000, ylabel=True, legend=False)
+        for ds in datastructures:
+            for u in urates:
+                plot_workload(
+                    microbench_dir, ds, max_keys_dict[ds], u, rqrate, True, True, args.save_plots)
+                pass
 
-    # EXPERIMENT 1.
-    # plot_exp1(dirpath, 'lazylist', 10000, True)
-    # plot_exp1(dirpath, 'skiplistlock', 100000)
-    # plot_exp1(dirpath, 'citrus', 100000)
-
-    # OTHERS
-    # plot_memreclamation(os.path.join(rootdir, 'microbench'),
-    #                     'nofree', 'free', 'skiplistlock', 100000)
-    # plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
-    #                 'SKIPLISTLOCK', ylabel=True, legend=False)
-    plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
-                    'CITRUS', ylabel=False, legend=True)
-    # plot_relaxation(os.path.join(dirpath, 'relax'), 'skiplistlock', 100000, ylabel=True, legend=False)
-    # plot_ubundle(dirpath, 'skiplistlock', 100000)
-
-    # plot_extremes2(dirpath, 'citrus', 100000, True)
+    ## Plot macrobench results.
+    if args.macrobench:
+        macrobench_dir = 'macrobench/data'
+        plot_macrobench(os.path.join(macrobench_dir, 'rq_tpcc'),
+                        'SKIPLISTLOCK', ylabel=True, legend=True, save=args.save_plots)
+        plot_macrobench(os.path.join(macrobench_dir, 'rq_tpcc'),
+                        'CITRUS', ylabel=True, legend=True, save=args.save_plots)

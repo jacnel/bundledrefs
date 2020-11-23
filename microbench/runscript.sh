@@ -2,11 +2,11 @@
 #
 # Run script for the micro benchmark experiments.
 #
-# Author: Trevor Brown
+# Author: Trevor Brown (updated by Jacob Nelson)
 
 source ../config.mk
 
-trials=3
+trials=1
 
 cols="%6s %12s %12s %12s %8s %6s %6s %8s %6s %6s %8s %12s %12s %12s %12s"
 headers="step machine ds alg k u rq rqsize nrq nwork trial throughput rqs updates finds"
@@ -42,7 +42,8 @@ cnt2=$(expr $cnt2 \* $trials)
 echo "Performing $cnt2 trials..."
 
 secs=$(expr $millis / 1000)
-estimated_secs=$(expr $cnt2 \* $secs)
+estimated_millis=$(expr $cnt2 \* $millis)
+estimated_secs=$(expr $estimated_millis / 1000)
 estimated_hours=$(expr $estimated_secs / 3600)
 estimated_mins=$(expr $estimated_secs / 60)
 estimated_mins=$(expr $estimated_mins % 60)
@@ -96,6 +97,3 @@ if [ "$(cat warnings.txt | wc -l)" -ne 0 ]; then
   echo "NOTE: THERE WERE WARNINGS. PRINTING THEM..."
   cat warnings.txt
 fi
-
-mv results.db results.db.old
-python create_db.py

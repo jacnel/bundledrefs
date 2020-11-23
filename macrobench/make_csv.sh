@@ -1,6 +1,14 @@
 #!/bin/bash
 
-colStr=$(cat data/rq_tpcc/summary.txt | tail -1 | tr "," "\n" | tr -d " " | cut -d"=" -f1 | tr "\n" ",")
+if [[ $# != 2 ]]; then
+  echo "Usage: $0 <input_file> <output_file>"
+  exit 1
+fi
+
+infile=$1
+outfile=$2
+
+colStr=$(cat ${infile} | tail -1 | tr "," "\n" | tr -d " " | cut -d"=" -f1 | tr "\n" ",")
 remove="step trial time_wait time_ts_alloc time_man time_index time_abort time_cleanup latency deadlock_cnt cycle_detect dl_detect_time dl_wait_time time_query debug1 debug2 debug3 debug4 debug5 node_size descriptor_size"
 for r in $remove; do
   colStr=$(echo $colStr | sed "s/$r,//")
@@ -8,15 +16,9 @@ done
 
 ntrials=5
 n=0
-outfile="data.csv"
 echo $colStr | sed 's/,$//' >${outfile}
 
-file="data/rq_tpcc/summary.txt"
-if [[ $# == 1 ]]; then
-  file=$1
-fi
-
-cat $file | grep "datastructure" | while read line; do
+cat $infile | grep "datastructure" | while read line; do
   if [[ $n == $(($ntrials + 1)) ]] || [[ $n == 0 ]]; then
     # Initialize values.
     txn_cnt=0

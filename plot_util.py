@@ -7,13 +7,7 @@ dsconfig = {'lazylist': {'max_keys': [10000]}, 'skiplistlock': {
     'max_keys': [100000, 1000000]}, 'citrus': {'max_keys': [100000, 1000000]}}
 algorithms = ['lbundle', 'lockfree', 'rwlock', 'rlu', 'unsafe']
 max_keys = [10000, 100000, 1000000]
-ntrials = 1
-
-# COLORS = ['rgb(31, 119, 180)', 'rgb(255, 127, 14)',
-#           'rgb(44, 160, 44)', 'rgb(214, 39, 40)',
-#           'rgb(148, 103, 189)', 'rgb(140, 86, 75)',
-#           'rgb(227, 119, 194)', 'rgb(127, 127, 127)',
-#           'rgb(188, 189, 34)', 'rgb(23, 190, 207)']
+ntrials = 1  # Must match the number of trials used to generate the data
 
 COLORS = ['rgb(255,255,106)', 'rgb(31,120,180)', 'rgb(178,223,138)', 'rgb(51,160,44)', 'rgb(251,154,153)', 'rgb(207,233,252)',
           'rgb(188, 189, 34)', 'rgb(23, 190, 207)', 'rgb(23, 190, 207)', 'rgb(23, 190, 207)']
@@ -55,8 +49,6 @@ delayconfig = {
     'nofree': {'label': 'Leaky', 'color': COLORS[5], 'symbol': 7}
 }
 
-rootdir = '/Users/jjn/Documents/Lehigh/sss/results/bundle/'
-machine = 'luigi'
 separate_unsafe = True
 
 # Global variables used for formatting.
@@ -125,7 +117,7 @@ class CSVFile():
         data = self.df.copy()  # Make a copy of the data frame to return.
         for o, w in zip(filter_col, filter_with):
             # Filter the data for the rows matching the column.
-            data = data[data[o] == w]
+           data = data[data[o] == w]
         x = sorted(data[x_axis].unique())  # Get the unique x axis values
         y = data[y_axis].to_numpy()  # Get corresponding y values
         return {'x': x, 'y': y}
@@ -134,6 +126,7 @@ class CSVFile():
     @staticmethod
     def get_or_gen_csv(dirpath, ds, n):
         filepath = os.path.join(dirpath, ds + '.csv')
+        assert os.path.exists(os.path.join('./microbench', 'make_csv.sh'))
         if not os.path.exists(filepath):
             print('GENERATING .csv FILE FOR ' + ds + '...')
             subprocess.call('./make_csv.sh ' + dirpath + ' ' +
