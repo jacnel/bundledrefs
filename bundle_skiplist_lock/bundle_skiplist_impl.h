@@ -318,7 +318,6 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
                     ((long long)p_new_node) % (1 << 12));
 #endif
       initNode(tid, p_new_node, key, value, topLevel);
-      sl_node_lock(p_new_node);
 
       // Initialize bundle with the lowest level pointer.
       p_new_node->topLevel = topLevel;
@@ -357,10 +356,6 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
         // don't try to unlock the same node twice
         sl_node_unlock(p_preds[level]);
       }
-    }
-
-    if (valid) {
-      sl_node_unlock(p_new_node);
     }
 
     recmgr->enterQuiescentState(tid);
