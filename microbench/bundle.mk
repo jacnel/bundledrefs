@@ -2,7 +2,7 @@
 
 # Helpful flags for debugging.
 # FLAGS += -DBUNDLE_CLEANUP_NO_FREE
-# FLAGS += -DBUNDLE_DEBUG
+FLAGS += -DBUNDLE_DEBUG
 FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 # ---------------------------
 

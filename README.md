@@ -17,8 +17,10 @@ The experiments that we report in the paper are located in the 'microbench' and 
 # Requirements
 
 C++ Libraries:
-libnuma
+numactl
+jemalloc (included in 'lib')
 
+Python libraries:
 Python 3.x
 plotly 
 plotly-orca

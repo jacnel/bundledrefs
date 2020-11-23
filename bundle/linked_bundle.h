@@ -265,6 +265,8 @@ class Bundle : public BundleInterface<NodeType> {
 #endif
     return ss.str();
   }
+
+  
 };
 
 #endif  // BUNDLE_LINKED_BUNDLE_H

@@ -335,21 +335,19 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       rqProvider->linearize_update_at_write(
           tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs, INSERT);
       if (!p_preds[0]->validate()) {
-        // std::cout << "Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
-        //           << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-        //           << p_preds[0]->p_next[0]
-        //           << " vs. [key=" <<
-        //           p_preds[0]->rqbundle->getHead()->ptr_->key
-        //           << ",marked=" <<
-        //           p_preds[0]->rqbundle->getHead()->ptr_->marked
-        //           << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
+        timestamp_t unused_ts;
+        std::cout << "[INSERT] Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
+                  << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+                  << p_preds[0]->p_next[0]
+                  << " vs. [key=" << p_preds[0]->rqbundle->first(unused_ts)->key
+                  << ",marked=" << p_preds[0]->rqbundle->first(unused_ts)->marked
+                  << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
         exit(1);
       }
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
 #endif
       // p_new_node->fullyLinked = 1;
-      sl_node_unlock(p_new_node);
       done = 1;
     }
 
@@ -360,6 +358,11 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
         sl_node_unlock(p_preds[level]);
       }
     }
+
+    if (valid) {
+      sl_node_unlock(p_new_node);
+    }
+
     recmgr->enterQuiescentState(tid);
   }
   return ret;
@@ -431,15 +434,13 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         nodeptr deletedNodes[] = {p_victim, nullptr};
         rqProvider->physical_deletion_succeeded(tid, deletedNodes);
         if (!p_preds[0]->validate()) {
-          // std::cout << "Pointer mismatch! [key=" <<
-          // p_preds[0]->p_next[0]->key
-          //           << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-          //           << p_preds[0]->p_next[0] << " vs. [key="
-          //           << p_preds[0]->rqbundle->getHead()->ptr_->key <<
-          //           ",marked="
-          //           << p_preds[0]->rqbundle->getHead()->ptr_->marked << "] "
-          //           << p_preds[0]->rqbundle->getHead()->ptr_ << " "
-          //           << p_preds[0]->rqbundle->dump(0) << std::flush;
+          timestamp_t unused_ts;
+          std::cout << "[DELETE] Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
+                    << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+                    << p_preds[0]->p_next[0]
+                    << " vs. [key=" << p_preds[0]->rqbundle->first(unused_ts)->key
+                    << ",marked=" << p_preds[0]->rqbundle->first(unused_ts)->marked
+                    << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
           exit(1);
         }
         ret = p_victim->val;

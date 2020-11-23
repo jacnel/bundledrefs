@@ -39,7 +39,6 @@ FLAGS += -DINSERT_FUNC=insertIfAbsent
 # Include bundle configuration macros
 include bundle.mk
 
-
 LDFLAGS = -L../lib
 LDFLAGS += -I../
 LDFLAGS += -I../bst
@@ -73,7 +72,6 @@ LDFLAGS += -I../unsafe/lazylist/
 LDFLAGS += -I../unsafe/skiplist_lock/
 LDFLAGS += -I../unsafe/citrus/
 # -------------------------
-
 
 LDFLAGS += -lpthread
 LDFLAGS += -ldl
@@ -114,8 +112,8 @@ lazylist.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 lazylist.rq_rwlock:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-lazylist.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# lazylist.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 # lazylist.rq_unsafe:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
@@ -139,8 +137,8 @@ skiplistlock.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 skiplistlock.rq_rwlock:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplistlock.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# skiplistlock.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 # skiplistlock.rq_unsafe:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 skiplistlock.rq_snapcollector:
@@ -163,8 +161,8 @@ citrus.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 citrus.rq_rwlock:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-citrus.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# citrus.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 # citrus.rq_unsafe:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
