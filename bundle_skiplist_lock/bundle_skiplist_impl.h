@@ -324,15 +324,20 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       for (level = 0; level <= topLevel; level++) {
         p_new_node->p_next[level] = p_succs[level];
       }
+
+      // Bundle preparation must occur before the node is connected.
+      Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle,
+                                         p_new_node->rqbundle, nullptr};
+      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
+      rqProvider->prepare_bundles(bundles, ptrs);
+
       SOFTWARE_BARRIER;
       for (level = 0; level <= topLevel; level++) {
         p_preds[level]->p_next[level] = p_new_node;
       }
-      Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle,
-                                         p_new_node->rqbundle, nullptr};
-      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
-      rqProvider->linearize_update_at_write(
-          tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs, INSERT);
+      timestamp_t lin_time = rqProvider->linearize_update_at_write(
+          tid, &p_new_node->fullyLinked, (long long)1);
+      rqProvider->finalize_bundles(bundles, lin_time);
       // if (!p_preds[0]->validate()) {
       //   timestamp_t unused_ts;
       //   std::cout << "[INSERT] Pointer mismatch! [key="
@@ -425,8 +430,10 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
       if (valid) {
         Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle, nullptr};
         nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
-        rqProvider->linearize_update_at_write(
-            tid, &p_victim->marked, (long long)1, bundles, ptrs, REMOVE);
+        rqProvider->prepare_bundles(bundles, ptrs);
+        timestamp_t lin_time = rqProvider->linearize_update_at_write(
+            tid, &p_victim->marked, (long long)1);
+        rqProvider->finalize_bundles(bundles, lin_time);
         for (level = topLevel; level >= 0; level--) {
           p_preds[level]->p_next[level] = p_victim->p_next[level];
         }

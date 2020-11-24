@@ -223,14 +223,9 @@ class RQProvider {
 #endif
   }
 
-  // Find and update the newest reference in the predecesor's bundle. If this
-  // operation is an insert, then the new nodes bundle must also be
-  // initialized. Any node whose bundle is passed here must be locked.
-  template <typename T>
-  inline T linearize_update_at_write(const int tid, T volatile *const lin_addr,
-                                     const T &lin_newval,
-                                     Bundle<NodeType> **bundles,
-                                     NodeType *const *const ptrs, op o) {
+  // Prepares bundles by calling prepare on each provided bundle-pointer pair.
+  inline void prepare_bundles(Bundle<NodeType> **bundles,
+                              NodeType *const *const ptrs) {
     // PENDING_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
@@ -246,22 +241,29 @@ class RQProvider {
       curr_bundle = bundles[i];
       curr_ptr = ptrs[i];
     }
-    SOFTWARE_BARRIER;
+  }
 
-    // Get update linearization timestamp.
-    timestamp_t lin_time = get_update_lin_time(tid);
-    SOFTWARE_BARRIER;
-    *lin_addr = lin_newval;  // Original linearization point.
-    SOFTWARE_BARRIER;
-
-    i = 0;
-    curr_bundle = bundles[0];
+  inline void finalize_bundles(Bundle<NodeType> **bundles, timestamp_t ts) {
+    int i = 0;
+    Bundle<NodeType> *curr_bundle = bundles[0];
     while (curr_bundle != nullptr) {
-      curr_bundle->finalize(lin_time);
+      curr_bundle->finalize(ts);
       ++i;
       curr_bundle = bundles[i];
     }
+  }
+
+  // Find and update the newest reference in the predecesor's bundle. If this
+  // operation is an insert, then the new nodes bundle must also be
+  // initialized. Any node whose bundle is passed here must be locked.
+  template <typename T>
+  inline timestamp_t linearize_update_at_write(const int tid, T volatile *const lin_addr,
+                                     const T &lin_newval) {
+    // Get update linearization timestamp.
+    timestamp_t lin_time = get_update_lin_time(tid);
+    *lin_addr = lin_newval;  // Original linearization point.
     SOFTWARE_BARRIER;
+    return lin_time;
   }
 };
 

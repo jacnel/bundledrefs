@@ -29,7 +29,9 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <utility>
+
 #include "bundle_citrus.h"
 #include "locks_impl.h"
 #include "urcu.h"
@@ -55,9 +57,9 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
   //        printf("\n mutex init failed\n");
   //    }
   nnode->lock = false;
-  nnode->rqbundle[0] = new Bundle<node_t<K,V>>();
+  nnode->rqbundle[0] = new Bundle<node_t<K, V>>();
   nnode->rqbundle[0]->init();
-  nnode->rqbundle[1] = new Bundle<node_t<K,V>>();
+  nnode->rqbundle[1] = new Bundle<node_t<K, V>>();
   nnode->rqbundle[1]->init();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
@@ -101,8 +103,10 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
   // root, e.g., to perform a cas)
   Bundle<node_t<K, V>>* bundles[] = {_root->rqbundle[0], nullptr};
   nodeptr ptrs[] = {_rootchild, nullptr};
-  rqProvider->linearize_update_at_write(tid, &root, _root, bundles, ptrs,
-                                        INSERT);
+  rqProvider->prepare_bundles(bundles, ptrs);
+  timestamp_t lin_time =
+      rqProvider->linearize_update_at_write(tid, &root, _root);
+  rqProvider->finalize_bundles(bundles, lin_time);
 #else
   root = newNode(tid, NO_KEY, NO_VALUE);
   root->child[0] = newNode(tid, NO_KEY, NO_VALUE);
@@ -247,10 +251,14 @@ retry:
     // nodeptr insertedNodes[] = {nnode, NULL};
     // nodeptr deletedNodes[] = {NULL};
 
-    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1], nullptr};
+    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction],
+                                       nnode->rqbundle[0], nnode->rqbundle[1],
+                                       nullptr};
     nodeptr ptrs[] = {nnode, nullptr, nullptr, nullptr};
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction], nnode,
-                                          bundles, ptrs, INSERT);
+    rqProvider->prepare_bundles(bundles, ptrs);
+    timestamp_t lin_time = rqProvider->linearize_update_at_write(
+        tid, &prev->child[direction], nnode);
+    rqProvider->finalize_bundles(bundles, lin_time);
 
     releaseLock(&(prev->lock));
     recordmgr->enterQuiescentState(tid);
@@ -310,17 +318,12 @@ retry:
   if (curr->child[0] == NULL) {
     curr->marked = true;
 
-    // nodeptr insertedNodes[] = {NULL};
-    // nodeptr deletedNodes[] = {curr, NULL};
-
     Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
     nodeptr ptrs[] = {curr->child[1], nullptr};
-
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction],
-                                          (nodeptr)curr->child[1], bundles,
-                                          ptrs, REMOVE);
-
-    // prev->validate();
+    rqProvider->prepare_bundles(bundles, ptrs);
+    timestamp_t lin_time = rqProvider->linearize_update_at_write(
+        tid, &prev->child[direction], (nodeptr)curr->child[1]);
+    rqProvider->finalize_bundles(bundles, lin_time);
 
     nodeptr deletedNodes[] = {curr, nullptr};
     rqProvider->physical_deletion_succeeded(tid, deletedNodes);
@@ -339,16 +342,12 @@ retry:
   if (curr->child[1] == NULL) {
     curr->marked = true;
 
-    // nodeptr insertedNodes[] = {NULL};
-    // nodeptr deletedNodes[] = {curr, NULL};
-
     Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
     nodeptr ptrs[] = {curr->child[0], nullptr};
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction],
-                                          (nodeptr)curr->child[0], bundles,
-                                          ptrs, REMOVE);
-
-    // prev->validate();
+    rqProvider->prepare_bundles(bundles, ptrs);
+    timestamp_t lin_time = rqProvider->linearize_update_at_write(
+        tid, &prev->child[direction], (nodeptr)curr->child[0]);
+    rqProvider->finalize_bundles(bundles, lin_time);
 
     nodeptr deletedNodes[] = {curr, nullptr};
     rqProvider->physical_deletion_succeeded(tid, deletedNodes);
@@ -386,20 +385,16 @@ retry:
     nnode->child[1] = curr->child[1];
     acquireLock(&(nnode->lock));
 
-    // nodeptr insertedNodes[] = {nnode, NULL};
-    // nodeptr deletedNodes[] = {curr, succ, NULL};
     Bundle<node_t<K, V>>* bundles[] = {
         prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1],
         (prevSucc != curr ? prevSucc->rqbundle[0] : nullptr), nullptr};
     nodeptr ptrs[] = {nnode, curr->child[0],
                       (prevSucc != curr ? curr->child[1] : succ->child[1]),
                       (prevSucc != curr ? succ->child[1] : nullptr), nullptr};
-    rqProvider->linearize_update_at_write(tid, &prev->child[direction], nnode,
-                                          bundles, ptrs, REMOVE);
-
-    // prev->validate();
-    // nnode->validate();
-    // prevSucc->validate();
+    rqProvider->prepare_bundles(bundles, ptrs);
+    timestamp_t lin_time = rqProvider->linearize_update_at_write(
+        tid, &prev->child[direction], nnode);
+    rqProvider->finalize_bundles(bundles, lin_time);
 
     nodeptr deletedNodes[] = {curr, succ, nullptr};
     rqProvider->physical_deletion_succeeded(tid, deletedNodes);
