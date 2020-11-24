@@ -45,7 +45,7 @@ class node_t {
                       // fields that are modified at linearization points of
                       // operations to occupy a machine word)
     node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
-    volatile Bundle<node_t>* rqbundle;
+    Bundle<node_t>* rqbundle;
   };
 
   bool validate() {

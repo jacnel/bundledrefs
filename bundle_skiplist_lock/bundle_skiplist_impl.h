@@ -432,7 +432,6 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         }
         nodeptr deletedNodes[] = {p_victim, nullptr};
         rqProvider->physical_deletion_succeeded(tid, deletedNodes);
-        SOFTWARE_BARRIER;
         if (!p_preds[0]->validate()) {
           timestamp_t unused_ts;
           nodeptr bundle_head = p_preds[0]->rqbundle->first(unused_ts);
