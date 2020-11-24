@@ -79,6 +79,7 @@ class RQProvider {
  public:
   RQProvider(const int num_processes, DataStructure *ds, RecordManager *recmgr)
       : num_processes_(num_processes), ds_(ds), recmgr_(recmgr) {
+    assert(num_processes <= MAX_TID_POW2);
     rq_thread_data_ = new __rq_thread_data[num_processes];
     for (int i = 0; i < num_processes; ++i) {
       rq_thread_data_[i].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
@@ -261,6 +262,7 @@ class RQProvider {
                                                T volatile *const lin_addr,
                                                const T &lin_newval) {
     // Get update linearization timestamp.
+    SOFTWARE_BARRIER;
     timestamp_t lin_time = get_update_lin_time(tid);
     *lin_addr = lin_newval;  // Original linearization point.
     SOFTWARE_BARRIER;
