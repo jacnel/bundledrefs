@@ -94,7 +94,7 @@ class RQProvider {
       exit(-1);
     }
     std::stringstream ss;
-    ss << "Cleanup started: 0x" << std::hex << pthread_self() << std::endl;
+    ss << "Cleanup started: 0x" << std::hex << cleanup_thread_ << std::endl;
     std::cout << ss.str() << std::flush;
 #endif
   }
@@ -257,8 +257,9 @@ class RQProvider {
   // operation is an insert, then the new nodes bundle must also be
   // initialized. Any node whose bundle is passed here must be locked.
   template <typename T>
-  inline timestamp_t linearize_update_at_write(const int tid, T volatile *const lin_addr,
-                                     const T &lin_newval) {
+  inline timestamp_t linearize_update_at_write(const int tid,
+                                               T volatile *const lin_addr,
+                                               const T &lin_newval) {
     // Get update linearization timestamp.
     timestamp_t lin_time = get_update_lin_time(tid);
     *lin_addr = lin_newval;  // Original linearization point.

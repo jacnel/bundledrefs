@@ -134,11 +134,6 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
       KEY_MIN(_KEY_MIN),
       KEY_MAX(_KEY_MAX),
       NO_VALUE(NO_VALUE) {
-  rqProvider =
-      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
-                     RecManager, true, false>(numProcesses, this, recmgr);
-
-  // note: initThread calls rqProvider->initThread
 
   int i;
   const int dummyTid = 0;
@@ -155,6 +150,10 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
   for (i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
     p_head->p_next[i] = p_tail;
   }
+
+  rqProvider =
+      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
+                     RecManager, true, false>(numProcesses, this, recmgr);
 }
 
 template <typename K, typename V, class RecManager>
