@@ -79,7 +79,10 @@ class RQProvider {
  public:
   RQProvider(const int num_processes, DataStructure *ds, RecordManager *recmgr)
       : num_processes_(num_processes), ds_(ds), recmgr_(recmgr) {
-    assert(num_processes <= MAX_TID_POW2);
+    if (num_processes > MAX_TID_POW2) {
+      cerr << "num_processes (" << num_processes << ") > maxthreads_pow2 (" << MAX_TID_POW2 << "): Please increase maxthreads_pow2 in config.mk"
+      exit(1);
+    }
     rq_thread_data_ = new __rq_thread_data[num_processes];
     for (int i = 0; i < num_processes; ++i) {
       rq_thread_data_[i].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
