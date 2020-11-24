@@ -82,4 +82,4 @@ for counting in 1 0; do
   done
 done
 
-./makecsv.sh
+./makecsv.sh $fsummary data.csv

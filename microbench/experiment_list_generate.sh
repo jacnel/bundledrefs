@@ -17,11 +17,6 @@ rqtechniques="lockfree rwlock unsafe rlu lbundle"
 datastructures="skiplistlock citrus"
 ksizes="100000"
 
-## All configurations.
-# rqtechniques="lockfree rwlock unsafe rlu lbundle"
-# datastructures="skiplistlock citrus lazylist"
-# ksizes="10000 100000 1000000"
-
 prepare_exp() {
   echo 0 0 0 0 0 0 $1 prepare
 }

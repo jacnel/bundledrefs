@@ -3,12 +3,6 @@ import os
 import subprocess
 
 # General configuration.
-dsconfig = {'lazylist': {'max_keys': [10000]}, 'skiplistlock': {
-    'max_keys': [100000, 1000000]}, 'citrus': {'max_keys': [100000, 1000000]}}
-algorithms = ['lbundle', 'lockfree', 'rwlock', 'rlu', 'unsafe']
-max_keys = [10000, 100000, 1000000]
-ntrials = 1  # Must match the number of trials used to generate the data
-
 COLORS = ['rgb(255,255,106)', 'rgb(31,120,180)', 'rgb(178,223,138)', 'rgb(51,160,44)', 'rgb(251,154,153)', 'rgb(207,233,252)',
           'rgb(188, 189, 34)', 'rgb(23, 190, 207)', 'rgb(23, 190, 207)', 'rgb(23, 190, 207)']
 
@@ -103,6 +97,71 @@ def reset_base_config():
     layout_['margin'] = dict(l=0, r=10, t=10, b=0)
 
 
+def parse_config(filepath):
+    required_configs = {'maxthreads': int,
+                        'threadincrement': int}
+    config = {}
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line == '' or line.startswith('#'):
+                continue
+            entry = line.split('=', maxsplit=1)
+            if entry[0] not in required_configs.keys():
+                print('Ignoring line in config.mk: {}'.format(line))
+                continue
+            config[entry[0]] = required_configs[entry[0]](entry[1])
+    return config
+
+
+def parse_experiment_list_generate(filepath):
+    configs = {'datastructures': None, 'ksizes': None}
+    done = {'datastructures': False, 'ksizes': False}
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line == '' or line.startswith('#'):
+                continue
+            for k in configs.keys():
+                if k in line:
+                    entry = line.split('=', maxsplit=1)
+                    filtered = ''.join(
+                        (filter(lambda x: x not in ['\"'], entry[1])))
+                    value = filtered.split(' ')  # list is space separated
+                    if k == 'ksizes':
+                        configs[entry[0]] = [int(v) for v in value] 
+                    else:
+                        configs[entry[0]] = value
+                    done[entry[0]] = True
+            if False in done.values():
+               continue
+            else:
+                break 
+    return configs
+
+
+def parse_runscript(filepath):
+    configs = {'trials': None}
+    done = {'trials': False}
+    with open(filepath, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line == '' or line.startswith('#'):
+                continue
+            for k in configs.keys():
+                if k in line:
+                    entry = line.split('=', maxsplit=1)
+                    filtered = ''.join(
+                        (filter(lambda x: x not in ['\"'], entry[1])))
+                    if k == 'trials':
+                        configs[k] = int(filtered)
+                    done[k] = True
+            if False in done.values():
+               continue
+            else:
+                break 
+    return configs
+
 class CSVFile():
     """A wrapper class to read and manipulate data from output produced by make_csv.sh"""
 
@@ -117,7 +176,7 @@ class CSVFile():
         data = self.df.copy()  # Make a copy of the data frame to return.
         for o, w in zip(filter_col, filter_with):
             # Filter the data for the rows matching the column.
-           data = data[data[o] == w]
+            data = data[data[o] == w]
         x = sorted(data[x_axis].unique())  # Get the unique x axis values
         y = data[y_axis].to_numpy()  # Get corresponding y values
         return {'x': x, 'y': y}
@@ -128,9 +187,9 @@ class CSVFile():
         filepath = os.path.join(dirpath, ds + '.csv')
         assert os.path.exists(os.path.join('./microbench', 'make_csv.sh'))
         if not os.path.exists(filepath):
-            print('GENERATING .csv FILE FOR ' + ds + '...')
+            # print('GENERATING .csv FILE FOR ' + ds + '...')
             subprocess.call('./microbench/make_csv.sh ' + dirpath + ' ' +
                             str(n) + ' ' + ds, shell=True)
-        else:
-            print('USING EXISTING .csv FILE')
+        # else:
+            # print('USING EXISTING .csv FILE')
         return filepath
