@@ -69,14 +69,14 @@ static int sl_randomLevel(const int tid, Random* const threadRNGs) {
 template <typename K, typename V, class RecordMgr>
 void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
                                                 K key, V value, int height) {
+  p_node->rqbundle = new Bundle<node_t<K, V>>();
+  p_node->rqbundle->init();
   p_node->key = key;
   p_node->val = value;
   p_node->topLevel = height;
   p_node->lock = 0;
   p_node->marked = (long long)0;
   p_node->fullyLinked = (long long)0;
-  p_node->rqbundle = new Bundle<node_t<K, V>>();
-  p_node->rqbundle->init();
 }
 
 template <typename K, typename V, class RecordMgr>
@@ -146,11 +146,11 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
 
   p_tail = allocateNode(dummyTid);
   initNode(dummyTid, p_tail, KEY_MAX, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  p_tail->fullyLinked = 1;
+  // p_tail->fullyLinked = 1;
 
   p_head = allocateNode(dummyTid);
   initNode(dummyTid, p_head, KEY_MIN, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  p_head->fullyLinked = 1;
+  // p_head->fullyLinked = 1;
 
   for (i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
     p_head->p_next[i] = p_tail;
@@ -318,8 +318,6 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
                     ((long long)p_new_node) % (1 << 12));
 #endif
       initNode(tid, p_new_node, key, value, topLevel);
-
-      // Initialize bundle with the lowest level pointer.
       p_new_node->topLevel = topLevel;
       for (level = 0; level <= topLevel; level++) {
         p_new_node->p_next[level] = p_succs[level];
