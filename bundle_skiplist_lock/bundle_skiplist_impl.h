@@ -333,16 +333,20 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
       rqProvider->linearize_update_at_write(
           tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs, INSERT);
-      if (!p_preds[0]->validate()) {
-        timestamp_t unused_ts;
-        std::cout << "[INSERT] Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
-                  << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-                  << p_preds[0]->p_next[0]
-                  << " vs. [key=" << p_preds[0]->rqbundle->first(unused_ts)->key
-                  << ",marked=" << p_preds[0]->rqbundle->first(unused_ts)->marked
-                  << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
-        exit(1);
-      }
+      // if (!p_preds[0]->validate()) {
+      //   timestamp_t unused_ts;
+      //   std::cout << "[INSERT] Pointer mismatch! [key="
+      //             << p_preds[0]->p_next[0]->key
+      //             << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+      //             << p_preds[0]->p_next[0]
+      //             << " vs. [key=" <<
+      //             p_preds[0]->rqbundle->first(unused_ts)->key
+      //             << ",marked="
+      //             << p_preds[0]->rqbundle->first(unused_ts)->marked << "] "
+      //             << p_preds[0]->rqbundle->first(unused_ts) << " "
+      //             << p_preds[0]->rqbundle->dump(0) << std::flush;
+      //   exit(1);
+      // }
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
 #endif
@@ -430,12 +434,13 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         rqProvider->physical_deletion_succeeded(tid, deletedNodes);
         if (!p_preds[0]->validate()) {
           timestamp_t unused_ts;
-          std::cout << "[DELETE] Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
+          nodeptr bundle_head = p_preds[0]->rqbundle->first(unused_ts);
+          std::cout << "[DELETE" << p_victim
+                    << "] Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
                     << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-                    << p_preds[0]->p_next[0]
-                    << " vs. [key=" << p_preds[0]->rqbundle->first(unused_ts)->key
-                    << ",marked=" << p_preds[0]->rqbundle->first(unused_ts)->marked
-                    << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
+                    << p_preds[0]->p_next[0] << " vs. [key=" << bundle_head->key
+                    << ",marked=" << bundle_head->marked << "] " << bundle_head
+                    << " " << p_preds[0]->rqbundle->dump(0) << std::flush;
           exit(1);
         }
         ret = p_victim->val;

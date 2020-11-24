@@ -261,6 +261,7 @@ class RQProvider {
       ++i;
       curr_bundle = bundles[i];
     }
+    SOFTWARE_BARRIER;
   }
 };
 
