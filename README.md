@@ -100,6 +100,6 @@ In comparison to the microbenchmark, this will take longer to run. We suggest go
 
 ## Memory Reclamation
 
-The initial binaries are built without bundle entry reclamation to match the paper discussion. Whenever a node is deleted its bundle entries are reclaimed but stale bundle entries are not garbage collected. To enable reclamation of bundle entries, uncomment line 11 of `bundle.mk`. The following line defines the number of nanoseconds that elapse between iterations of the cleanup thread. It is currently set to 100ms.
+The initial binaries are built without bundle entry reclamation to match the paper discussion. Whenever a node is deleted its bundle entries are reclaimed but stale bundle entries are not garbage collected for connected nodes. To enable reclamation of bundle entries, uncomment line 11 of `bundle.mk`. The following line defines the number of nanoseconds that elapse between iterations of the cleanup thread. It is currently set to 100ms.
 
 Once `bundle.mk` is updated, remake the the bundled data structures using `make -j lbundle` and rerun the previously described microbenchmark. Be sure to move the original plots so they are not overwritten when regenerating them.
