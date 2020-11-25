@@ -13,6 +13,7 @@ microbench/*.csv
 microbench/experiment_list.txt*
 microbench/__pycache__
 microbench/data/summary.txt
+microbench/leakcheck*
 macrobench/bin/*
 macrobench/data/*
-microbench/leakcheck*
+__pycache__*
