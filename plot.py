@@ -6,7 +6,7 @@ from plot_util import *
 import argparse
 
 ## The following is necessary to get plotly's export feature to play nicely with Anaconda.
-plotly.io.orca.config.executable = '/usr/local/anaconda3/envs/bundledrefs/bin/orca'
+plotly.io.orca.config.executable = ''
 
 
 def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=False, save=False):

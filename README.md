@@ -28,16 +28,25 @@ _C++ Libraries_:
 + libjemalloc (included in 'lib'
 
 _Python libraries_:
-+ python (>= v3.6)
++ python (v3.6)
 + plotly (v4.12.0)
 + plotly-orca (v1.3.1)
-+ psutils (v5.7.2)
++ psutil (v5.7.2)
 + requests (v2.24.0)
 + pandas (v1.1.3)
 
-Note: any warnings regarding hardware transactional memory (HTM) can be safely ignored since we do not compare with this competitor.
+The easiest way to install the Python libraries is by using Ananconda3. This is a somewhat annoying step because Linux distros must download and run the Anaconda installer. However, it is either this or building plotly-orca manually as it is not currently available with `pip`. After installing Anaconda3, use the following commands.
+
+```
+conda create -n bundledrefs python=3.6
+conda activate bundledrefs
+conda install -y -c plotly plotly plotly-orca
+conda install -y psutil requests pandas
+```
 
 ## Kicking the Tires
+
+Note: any warnings regarding hardware transactional memory (HTM) can be safely ignored since we do not compare with this competitor.
 
 Once the C++ dependencies have been installed, you can begin to test the microbenchmark. First, configure the build with the `config.mk` file using the instructions provided there. Then, build the binaries for each of the data structures and range query techniques with the following:
 

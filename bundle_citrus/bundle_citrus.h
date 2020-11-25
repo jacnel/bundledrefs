@@ -253,8 +253,8 @@ class bundle_citrustree {
         left_total += left;
         right_total += right;
 
-        delete left_entries;
-        delete right_entries;
+        delete [] left_entries;
+        delete [] right_entries;
       }
     }
 
