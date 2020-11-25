@@ -129,7 +129,7 @@ class CSVFile():
         assert os.path.exists(os.path.join('./microbench', 'make_csv.sh'))
         if not os.path.exists(filepath):
             print('GENERATING .csv FILE FOR ' + ds + '...')
-            subprocess.call('./make_csv.sh ' + dirpath + ' ' +
+            subprocess.call('./microbench/make_csv.sh ' + dirpath + ' ' +
                             str(n) + ' ' + ds, shell=True)
         else:
             print('USING EXISTING .csv FILE')

@@ -5,8 +5,8 @@ from plotly import subplots
 from plot_util import *
 import argparse
 
-## The following is necessary to get plotly's export feature to play nicely with Anaconda.
-plotly.io.orca.config.executable = ''
+# The following is necessary to get plotly's export feature to play nicely with Anaconda.
+plotly.io.orca.config.executable = '/usr/local/anaconda3/envs/bundledrefs/bin/orca'
 
 
 def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=False, save=False):
@@ -17,18 +17,18 @@ def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=Fa
         os.path.join(dirpath, 'workloads'), ds, ntrials)
     csv = CSVFile(csvfile)
 
-    ## Provide column labels for desired x and y axis
+    # Provide column labels for desired x and y axis
     x_axis = 'wrk_threads'
     y_axis = 'tot_thruput'
 
-    ## Init data store
+    # Init data store
     data = {}
 
-    ## Ignores rows in .csv with the following label
+    # Ignores rows in .csv with the following label
     ignore = ['ubundle']
     algos = [k for k in plotconfig.keys() if k not in ignore]
 
-    ## Read in data for each algorithm
+    # Read in data for each algorithm
     for a in algos:
         data[a] = {}
         data[a] = csv.getdata(x_axis, y_axis, ['list', 'max_key', 'u_rate', 'rq_rate'], [
@@ -88,7 +88,7 @@ def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=Fa
             print(testalgo + ' / ' + o + ' []')
 
 
-def plot_rq_sizes(dirpath, dss, max_key, ylabel=False, legend=False, save=False):
+def plot_rq_sizes(dirpath, dss, max_key_dict, nthreads, ylabel=False, legend=False, save=False):
     # Experiment 1 demonstrates performance as the workload distribution changes.
 
     # Create the required .csv files if there are none, then plot the data structure.ß
@@ -96,21 +96,20 @@ def plot_rq_sizes(dirpath, dss, max_key, ylabel=False, legend=False, save=False)
     reset_base_config()
     x_axis = 'rq_size'
     y_axis = 'tot_thruput'
-    nthreads = [24, 48, 96, 144, 192]
     # Accumulate the data for each algorithm and the corresponding
     data = {}
     ignore = ['ubundle']
     algos = [k for k in plotconfig.keys() if k not in ignore]
     for ds in dss:
         csvfile = CSVFile.get_or_gen_csv(
-            os.path.join(dirpath, 'exp0'), ds, ntrials)
+            os.path.join(dirpath, 'rq_sizes'), ds, ntrials)
         csv = CSVFile(csvfile)
         data[ds] = {}
         for algo in algos:
             data[ds][algo] = {}
             for t in nthreads:
                 data[ds][algo][t] = csv.getdata(x_axis, y_axis, [
-                    'list', 'max_key', 'wrk_threads'], [ds + '-' + algo, max_key, t])
+                    'list', 'max_key', 'wrk_threads'], [ds + '-' + algo, max_key_dict[ds], t])
                 print(algo + '=' + str(data[ds][algo][t]['y']))
 
     # Calculate speedup.
@@ -142,7 +141,7 @@ def plot_rq_sizes(dirpath, dss, max_key, ylabel=False, legend=False, save=False)
     y_axis_layout_['dtick'] = .25
 
     legend_layout_ = {'font': legend_font_,
-                      'orientation': 'v', 'x': 0, 'y': 1.15, 'traceorder': 'grouped', 'tracegroupgap': 0} if legend else {}
+                      'orientation': 'v', 'x': 1.05, 'y': 0.5, 'traceorder': 'grouped', 'tracegroupgap': 0} if legend else {}
 
     reference_line_ = {'type': 'line', 'x0': -.6, 'y0': 1,
                        'x1': len(nthreads)+0.6, 'y1': 1, 'line': {'width': 8, 'color': 'black'}, 'layer': 'below'}
@@ -156,18 +155,18 @@ def plot_rq_sizes(dirpath, dss, max_key, ylabel=False, legend=False, save=False)
 
     layout_['shapes'] = [box1_, box2_, box3_]
     layout_['legend'] = legend_layout_
-    layout_['height'] = 750
+    layout_['height'] = 750 
     layout_['width'] = 2200
 
     # fig = go.Figure(layout=layout_)
     fig = plotly.subplots.make_subplots(
-        rows=len(dss), cols=2, column_widths=[0.03, 0.97],
+        rows=len(dss), cols=2, column_widths=[0.15, 0.85],
         specs=[[{'rowspan': 2}, {}],
                [None, {}]], shared_xaxes=True)
     curr_row_ = 1
     legend_shown_ = not legend  # If not legend then no legend is shown.
     for ds in dss:
-        showlegend_ = not legend_shown_ and ds != 'skiplistlock'
+        showlegend_ = not legend_shown_
         for algo in algos:
             if algo == overalgo:
                 continue
@@ -282,7 +281,7 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False):
         fig.add_trace(go.Scatter(
             x=x_, y=y_, name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
 
-        ## Uncommenting below and commenting above will include fewer points on the plot
+        # Uncommenting below and commenting above will include fewer points on the plot
         # fig.add_trace(go.Scatter(
         #     x=x_[0::2], y=y_[0::2], name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
 
@@ -531,8 +530,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--save_plots', action='store_true',
                         default=False, dest='save_plots')
-    parser.add_argument('--microbench', action='store_true', default=True, dest='microbench')
-    parser.add_argument('--macrobench', action='store_true', default=False, dest='macrobench')
+    parser.add_argument('--microbench', action='store_true',
+                        default=True, dest='microbench')
+    parser.add_argument('--macrobench', action='store_true',
+                        default=False, dest='macrobench')
     args = parser.parse_args()
 
     print(os.path.curdir)
@@ -540,7 +541,7 @@ if __name__ == "__main__":
     if not os.path.exists('./figures'):
         os.mkdir('./figures')
 
-    ## Plot microbench results.
+    # Plot microbench results.
     if args.microbench:
         microbench_dir = 'microbench/data'
 
@@ -548,7 +549,7 @@ if __name__ == "__main__":
         datastructures = ['skiplistlock']
         max_keys_dict = {'lazylist': 10000,
                          'skiplistlock': 100000, 'citrus': 100000}
-        rqrate = 10 
+        rqrate = 10
         urates = [0, 2, 10, 50, 90, 100]
 
         for ds in datastructures:
@@ -557,7 +558,14 @@ if __name__ == "__main__":
                     microbench_dir, ds, max_keys_dict[ds], u, rqrate, True, True, args.save_plots)
                 pass
 
-    ## Plot macrobench results.
+        rqrate = 50
+        urate = 50
+        datastructures = ['skiplistlock', 'citrus']
+        nthreads = [1, 16, 32, 48, 64]
+        plot_rq_sizes(microbench_dir, datastructures,
+                      max_keys_dict, nthreads, True, True, args.save_plots)
+
+    # Plot macrobench results.
     if args.macrobench:
         macrobench_dir = 'macrobench/data'
         plot_macrobench(os.path.join(macrobench_dir, 'rq_tpcc'),
