@@ -15,5 +15,5 @@ microbench/__pycache__
 microbench/data/summary.txt
 macrobench/bin/*
 macrobench/data/*
-__pycache__
+__pycache__*
 microbench/leakcheck*
