@@ -10,29 +10,30 @@ This work graciously builds on a benchmark developed by Arbel-Raviv and Brown's 
 
 The remainder of this document intendeds to support an artifact evaluation for the paper "Bundled References: An Abstraction for Highly-Concurrent Linearizable Range Queries" by Jacob Nelson, Ahmed Hasan and Roberto Palmieri. As stated above, our contributions with respect to the paper are contained in the directories prefixed with "bundle".
 
-'bundle' implements the bundling interface as a linked list of bundle entries. In addition to the linked list bundle, there is an experimental cirular buffer bundle (not included in the paper) as well as an unsafe version that eliminates the overhead of ensuring bundle consistency for comparison.
-'bundle_lazylist', 'bundle_skiplistlock' and 'bundle_citrus' each implement a data structure to which we apply bundling. Note that we do not apply our technique to the remaining data structures (which are lock-free) because our current bundling implementation would impose blocking.
+`bundle` implements the bundling interface as a linked list of bundle entries. In addition to the linked list bundle, there is an experimental cirular buffer bundle (not included in the paper) as well as an unsafe version that eliminates the overhead of ensuring bundle consistency for comparison.
 
-The experiments that we report in the paper are located in the 'microbench' and 'macrobench' directories.
+`bundle_lazylist`, `bundle_skiplistlock` and `bundle_citrus` each implement a data structure to which we apply bundling. Note that we do not apply our technique to the remaining data structures (which are lock-free) because our current bundling implementation would impose blocking.
 
-+ 'microbench' tests each data structure in isolation.
-+ 'macrobench' ports DBx1000 to include the implemented data structures.
+The experiments that we report in the paper are located in the following directories.
+
++ `microbench` tests each data structure in isolation.
++ `macrobench` ports DBx1000 to include the implemented data structures.
 
 ## Requirements
 
 The experiments from the paper were executed on a 4-socket machine with Intel Xeon Platinum 8160 processors running Red Hat Enterprise 7.6. However, we also successfully tested on a dual-socket machine with Intel Xeon E5-2630 v3 processors running Ubuntu 18.04. The C++ libraries are requried to build and run the experiments, while the Python libraries are used for plotting results.
 
 _C++ Libraries_:
-libnuma (e.g., `sudo apt install libnuma-dev`),
-libjemalloc (included in 'lib')
++ libnuma (e.g., `sudo apt install libnuma-dev`)
++ libjemalloc (included in 'lib'
 
 _Python libraries_:
-python (>= v3.6),
-plotly (v4.12.0),
-plotly-orca (v1.3.1),
-psutils (v5.7.2),
-requests (v2.24.0),
-pandas (v1.1.3)
++ python (>= v3.6)
++ plotly (v4.12.0)
++ plotly-orca (v1.3.1)
++ psutils (v5.7.2)
++ requests (v2.24.0)
++ pandas (v1.1.3)
 
 Note: any warnings regarding hardware transactional memory (HTM) can be safely ignored since we do not compare with this competitor.
 
@@ -47,13 +48,15 @@ make -j lazylist skiplistlock citrus rlu lbundle unsafe
 
 The first three arguments to the `make` command (i.e., `lazylist`, `skiplistlock`, `citrus`) build the EBR-based approach from Arbel-Raviv and Brown. The next argument (i.e., `rlu`) builds the RLU-based lazy-list and Citrus tree. The fifth argument (i.e., `lbundle`) builds the linked bundle lazy-list, optimistic skip-list and Citrus tree. Finally, the last argument (i.e., unsafe) builds the three data structures of interest with no instrumentation for range queries. Unlike the unsafe implementation provided by Arbel-Raviv and Brown, our implementation does not reclaim memory. We chose to do this because the RLU-based data structures do not utilize epoch-based memory reclamation. As such, our unsafe versions are an upper bound on all range query techniques and provides a more general reference.
 
-Finally, run individual tests to obtain results for a given configuration. Note that this project uses jemalloc to replace the standard memory allocation. The following command runs a workload of 5% inserts (`-i 5`), 5% deletes (`-d 5`), 80% gets and 10% range queries (`-rq 10`) on a key range of 100000 (`-k 100000`). Each range query has a range of 50 keys (`-rqsize 50`) and is prefilled (`-p`) based on the ratio of inserts and deletes. The execution lasts for 1s (`-t 1000`). There are no dedicated range query threads (`-nrq 0`) but there are a total of 8 worker threads (`-nwork 8`) and they are bound to cores following the bind policy (`-bind 0-7,16-23,8-15,24-31`)
+Finally, run individual tests to obtain results for a given configuration. Note that this project uses jemalloc to replace the standard memory allocation. The following command runs a workload of 5% inserts (`-i 5`), 5% deletes (`-d 5`), 80% gets and 10% range queries (`-rq 10`) on a key range of 100000 (`-k 100000`). Each range query has a range of 50 keys (`-rqsize 50`) and is prefilled (`-p`) based on the ratio of inserts and deletes. The execution lasts for 1s (`-t 1000`). There are no dedicated range query threads (`-nrq 0`) but there are a total of 8 worker threads (`-nwork 8`) and they are bound to cores following the bind policy (`-bind 0-7,16-23,8-15,24-31`).
 
 ```
 env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so ./hostname.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 -rqsize 50 -p -t 1000 -nrq 0 -nwork 8 -bind 0-7,16-23,8-15,24-31
 ```
 
-For more information on the input parameters see README.txt.old, which was written for the original benchmark. We did not change any arguments.
+The above example assumes a 32-core system. A simple way to follow our bind policy is to execute `lscpu` and copy the NUMA node CPUs, appending each set of CPUs separated by a comma.
+
+For more information on the input parameters to the microbenchmark itself see README.txt.old, which was written for the original implementation. We did not change any arguments.
 
 # Step-by-Step Instructions
 
@@ -69,8 +72,7 @@ cd ..
 python plot.py --save_plots --microbench
 ```
 
-
-`runscript.sh` will run expeirments based on 'experiment_list_generate.sh', which will write a list of experiments to be run into a file. 
+`runscript.sh` will run expeirments based on `experiment_list_generate.sh`, which will write a list of experiments to be run into a file. This generation script can be altered to try out new configurations.
 
 **WARNING**: The experiments can take a long time to run because there are many competitors. We have preconfigured the run to execute a single trial (the paper uses 3), run for 1s (the paper uses 3s), and only test the optimistic skip-list (the paper tests all three data structures). The number of trials and runtime can be configured in `runscript.sh` and the data structures in `experiment_list_generate.sh`.
 
