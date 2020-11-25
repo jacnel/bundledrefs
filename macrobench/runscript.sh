@@ -13,10 +13,10 @@ source ../microbench/supported.inc
 ntrials=5
 machine=$(hostname)
 
-outpath=data/rq_tpcc
+outpath=./data/rq_tpcc
 fsummary=$outpath/summary.txt
 
-if [[ ! $(mv $outpath $outpath.old) ]]; then
+if [[ -e "${outpath}" ]] && [[ ! $(mv "${outpath}" "${outpath}.old") ]]; then
   echo "Would you like to forcefully overwrite the existing version? (Y/n)"
   read answer
   while [[ "$(echo ${answer} | grep "^[yYnN]$")" == "" ]]; do

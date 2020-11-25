@@ -1,14 +1,8 @@
-/**
- *   This algorithm is based on:
- *   A Lazy Concurrent List-Based Set Algorithm,
- *   S. Heller, M. Herlihy, V. Luchangco, M. Moir, W.N. Scherer III, N. Shavit
- *   OPODIS 2005
- *
- *   The implementation is based on implementations by:
- *   Vincent Gramoli https://sites.google.com/site/synchrobench/
- *   Vasileios Trigonakis http://lpd.epfl.ch/site/ascylib -
- * http://lpd.epfl.ch/site/optik
- */
+// Jacob Nelson
+//
+// This is the implementation of a bundled lazylist, building off of the
+// implementation provided by Arbel-Raviv and Brown (see the 'lazylist'
+// directory for more information on it).
 
 #ifndef LAZYLIST_IMPL_H
 #define LAZYLIST_IMPL_H
@@ -36,6 +30,8 @@ class node_t {
                // that are modified at linearization points of operations to be
                // at least as large as a machine word)
   Bundle<node_t<K, V>>* rqbundle;
+
+  ~node_t() { delete rqbundle; }
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
@@ -196,33 +192,30 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
           recordmgr->enterQuiescentState(tid);
           return result;
         }
-        acquireLock(&(curr->lock));
-        result = curr->val;
-        // nodeptr insertedNodes[] = {NULL};
-        // nodeptr deletedNodes[] = {NULL};
-        // rqProvider->linearize_update_at_write(tid, &curr->val, val,
-        // insertedNodes, deletedNodes); // shifting KEY_MAX, and not using
-        // read_addr to access keys, makes this a problem. no need to run this
-        // through the rqProvider, since we just need a write, and we never
-        // access keys using the rqProvider.
-        curr->val = val;  // original linearization point
-        releaseLock(&(curr->lock));
-        releaseLock(&(pred->lock));
-        recordmgr->enterQuiescentState(tid);
-        return result;
+        cout << "ERROR: insert-replace functionality not implemented for "
+                "bundle_lazylist_impl at this time."
+             << endl;
+        exit(-1);
       }
       // key is not in list
       assert(curr->key != key);
       result = NO_VALUE;
       newnode = new_node(tid, key, val, curr);
 
+      // Prepare bundles.
       Bundle<node_t<K, V>>* bundles[] = {newnode->rqbundle, pred->rqbundle,
                                          nullptr};
       nodeptr ptrs[] = {curr, newnode, nullptr};
       rqProvider->prepare_bundles(bundles, ptrs);
+
+      // Perform original linearization.
       timestamp_t lin_time =
           rqProvider->linearize_update_at_write(tid, &pred->next, newnode);
+
+      // Finalize bundles.
       rqProvider->finalize_bundles(bundles, lin_time);
+
+      // Release locks and return.
       releaseLock(&(pred->lock));
       recordmgr->enterQuiescentState(tid);
       return result;
@@ -264,11 +257,16 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
       result = curr->val;
       nodeptr c_nxt = curr->next;
 
+      // Prepare bundles.
       Bundle<node_t<K, V>>* bundles[] = {pred->rqbundle, nullptr};
       nodeptr ptrs[] = {c_nxt, nullptr};
       rqProvider->prepare_bundles(bundles, ptrs);
+
+      // Perform original linearization point.
       timestamp_t lin_time =
           rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL);
+
+      // Finalize bundles.
       rqProvider->finalize_bundles(bundles, lin_time);
 
       pred->next = c_nxt;
@@ -295,7 +293,11 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   int cnt = 0;
   for (;;) {
     recordmgr->leaveQuiescentState(tid, true);
+
+    // Read gloabl timestamp and announce self.
     ts = rqProvider->start_traversal(tid);
+
+    // Phase 1. Traverse to node immediately preceding range.
     nodeptr pred = head;
     nodeptr curr = pred->next;
     while (curr->key < lo) {
@@ -304,13 +306,17 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     }
     assert(curr != nullptr);
 
+    // Phase 2. Enter range using bundles.
     curr = pred->rqbundle->getPtrByTimestamp(ts);
     while (curr != nullptr && curr->key <= hi) {
       if (curr->key >= lo) {
+        // Phase 3. Collect snapshot while in the range.
         cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
       }
       curr = curr->rqbundle->getPtrByTimestamp(ts);
     }
+
+    // Clears entry in active range query array.
     rqProvider->end_traversal(tid);
     recordmgr->enterQuiescentState(tid);
 

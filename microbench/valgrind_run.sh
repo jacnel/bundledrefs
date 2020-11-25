@@ -18,7 +18,7 @@ curr=0
 
 if [ "$#" -eq "1" ]; then
 #    echo "arg=$1"
-    valgrind --fair-sched=yes --tool=memcheck --leak-check=yes --read-inline-info=yes --read-var-info=yes ./$machine.$1.out $args > leakcheck.$1.txt 2>&1
+    valgrind --show-error-list=yes --fair-sched=yes --tool=memcheck --leak-check=yes --read-inline-info=yes --read-var-info=yes ./$machine.$1.out $args > leakcheck.$1.txt 2>&1
     ./valgrind_showerrors.sh $1
     ./valgrind_showleaks.sh $1
     exit

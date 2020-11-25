@@ -22,6 +22,11 @@
  * Converted into a class and implemented as a 3-path algorithm by Trevor Brown
  */
 
+// Jacob Nelson
+//
+// This implementation has been extended to utilize bundling to provide
+// linearizable range queries.
+
 #ifndef BUNDLE_CITRUS_IMPL_H
 #define BUNDLE_CITRUS_IMPL_H
 
@@ -53,9 +58,6 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
   nnode->tag[0] = 0;
   nnode->tag[1] = 0;
   nnode->value = value;
-  //    if (pthread_mutex_init(&(nnode->lock), NULL) != 0) {
-  //        printf("\n mutex init failed\n");
-  //    }
   nnode->lock = false;
   nnode->rqbundle[0] = new Bundle<node_t<K, V>>();
   nnode->rqbundle[0]->init();
@@ -82,8 +84,6 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
       ,
       NO_KEY(bigger_than_max_key),
       NO_VALUE(_NO_VALUE) {
-  //    cout<<"IN CONSTRUCTOR: NO_VALUE="<<NO_VALUE<<" AND
-  //    _NO_VALUE="<<_NO_VALUE<<endl;
   const int tid = 0;
   initThread(tid);
   // finish initializing RCU
@@ -96,16 +96,20 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
   nodeptr _rootchild = newNode(tid, NO_KEY, NO_VALUE);
   nodeptr _root = newNode(tid, NO_KEY, NO_VALUE);
   _root->child[0] = _rootchild;
-  // nodeptr insertedNodes[] = {_root, _rootchild, NULL};
-  // nodeptr deletedNodes[] = {NULL};
   root = NULL;  // to prevent reading from uninitialized root pointer in the
   // following call (which, depending on the rq provider, may read
   // root, e.g., to perform a cas)
+
+  // Prepare bundles for "real" insertion.
   Bundle<node_t<K, V>>* bundles[] = {_root->rqbundle[0], nullptr};
   nodeptr ptrs[] = {_rootchild, nullptr};
   rqProvider->prepare_bundles(bundles, ptrs);
+
+  // Perform linearization point.
   timestamp_t lin_time =
       rqProvider->linearize_update_at_write(tid, &root, _root);
+
+  // Finalize the bundles.
   rqProvider->finalize_bundles(bundles, lin_time);
 #else
   root = newNode(tid, NO_KEY, NO_VALUE);
@@ -208,36 +212,10 @@ retry:
       assert(result != NO_VALUE);
       return result;
     } else {
-      std::cerr << "In place updates are not supported at this time..."
+      std::cerr << "In place updates are not supported by bundle_citrus_impl "
+                   "at this time..."
                 << std::endl;
       exit(1);
-      // acquireLock(&(prev->lock));
-      // if (validate(tid, prev, tag, curr, direction)) {
-      //     acquireLock(&(curr->lock));
-      //     curr->marked = true;
-      //     nodeptr oldnode = rqProvider->read_addr(tid,
-      //     &prev->child[direction]); nodeptr nnode = newNode(tid, key, value);
-      //     rqProvider->write_addr(tid, &nnode->child[0],
-      //     rqProvider->read_addr(tid, &curr->child[0]));
-      //     rqProvider->write_addr(tid, &nnode->child[1],
-      //     rqProvider->read_addr(tid, &curr->child[1]));
-
-      //     nodeptr insertedNodes[] = {nnode, NULL};
-      //     nodeptr deletedNodes[] = {oldnode, NULL};
-      //     rqProvider->linearize_update_at_write(tid, &prev->child[direction],
-      //     nnode, insertedNodes, deletedNodes);
-
-      //     V result = oldnode->value;
-
-      //     releaseLock(&(curr->lock));
-      //     releaseLock(&(prev->lock));
-      //     recordmgr->enterQuiescentState(tid);
-      //     assert(result != NO_VALUE);
-      //     return result;
-      // }
-      // releaseLock(&(prev->lock));
-      // recordmgr->enterQuiescentState(tid);
-      // goto retry;
     }
   }
 
@@ -245,19 +223,18 @@ retry:
   if (validate(tid, prev, tag, curr, direction)) {
     nodeptr nnode = newNode(tid, key, value);
 
-    // NB: We do not need to lock the new node since it is not reachable until
-    // after pending bundle entries are inserted.
-
-    // nodeptr insertedNodes[] = {nnode, NULL};
-    // nodeptr deletedNodes[] = {NULL};
-
+    // Prepare the bundles.
     Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction],
                                        nnode->rqbundle[0], nnode->rqbundle[1],
                                        nullptr};
     nodeptr ptrs[] = {nnode, nullptr, nullptr, nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
+
+    // Perform linearization.
     timestamp_t lin_time = rqProvider->linearize_update_at_write(
         tid, &prev->child[direction], nnode);
+
+    // Finalize the bundles.
     rqProvider->finalize_bundles(bundles, lin_time);
 
     releaseLock(&(prev->lock));
@@ -318,11 +295,16 @@ retry:
   if (curr->child[0] == NULL) {
     curr->marked = true;
 
+    // Prepare bundles.
     Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
     nodeptr ptrs[] = {curr->child[1], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
+
+    // Perform linearization.
     timestamp_t lin_time = rqProvider->linearize_update_at_write(
         tid, &prev->child[direction], (nodeptr)curr->child[1]);
+
+    // Finalize bundles.
     rqProvider->finalize_bundles(bundles, lin_time);
 
     nodeptr deletedNodes[] = {curr, nullptr};
@@ -342,11 +324,16 @@ retry:
   if (curr->child[1] == NULL) {
     curr->marked = true;
 
+    // Prepare bundles.
     Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
     nodeptr ptrs[] = {curr->child[0], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
+
+    // Perform linearization.
     timestamp_t lin_time = rqProvider->linearize_update_at_write(
         tid, &prev->child[direction], (nodeptr)curr->child[0]);
+
+    // Finalize bundles.
     rqProvider->finalize_bundles(bundles, lin_time);
 
     nodeptr deletedNodes[] = {curr, nullptr};
@@ -385,6 +372,12 @@ retry:
     nnode->child[1] = curr->child[1];
     acquireLock(&(nnode->lock));
 
+    // Prepare bundles. Note that if the successor's parent is the node being
+    // deleted then the new node (which is a copy of the successor) needs to
+    // point to it previous right-hand branch. Otherwise, the successor's
+    // parents left-hand branch will point to it. In the original
+    // implementation, this is updated after `synchronize()` but we perform this
+    // check here to ensure that range queries follow the correct path.
     Bundle<node_t<K, V>>* bundles[] = {
         prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1],
         (prevSucc != curr ? prevSucc->rqbundle[0] : nullptr), nullptr};
@@ -392,8 +385,12 @@ retry:
                       (prevSucc != curr ? curr->child[1] : succ->child[1]),
                       (prevSucc != curr ? succ->child[1] : nullptr), nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
+
+    // Perform linearization.
     timestamp_t lin_time = rqProvider->linearize_update_at_write(
         tid, &prev->child[direction], nnode);
+
+    // Finalize bundles.
     rqProvider->finalize_bundles(bundles, lin_time);
 
     nodeptr deletedNodes[] = {curr, succ, nullptr};
@@ -447,19 +444,21 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     bool range_found = false;
     while (curr != nullptr) {
       if (curr->key >= lo && curr->key <= hi) {
+        // Phase 2. Enter the range.
         range_found = true;
-        // Found the subtree that contains the range. Note that a concurrent
+        // FOund the subtree that contains the range. Note that a concurrent
         // update may have deleted curr, so we cannot guarantee that curr is in
-        // the range. We can however guarantee that the range is rooted at
+        // the range. We can however guarantee that the range is contained in
+        // the subtree rooted at this node.
         curr = pred->rqbundle[direction]->getPtrByTimestamp(ts);
         break;
       } else if (curr->key < lo) {
-        // Search right subtree.
+        // Phase 1. Search right subtree.
         pred = curr;
         curr = curr->child[1];
         direction = 1;
       } else {
-        // Search left subtree.
+        // Phase 1. Search left subtree.
         pred = curr;
         curr = curr->child[0];
         direction = 0;
@@ -475,6 +474,7 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
         return 0;
       }
     } else if (curr != nullptr) {
+      // Phase 3. Collect the result set.
       block<node_t<K, V>> stack(nullptr);
       int cnt = 0;
       stack.push(curr);
@@ -484,12 +484,12 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
         // what (if anything) we need to do with CITRUS' validation function?
         // answer: nothing, because searches don't need to do anything with it.
 
-        // If the key is in the range, at it to the result set.
+        // If the key is in the range, add it to the result set.
         if (node->key >= lo && node->key <= hi) {
           cnt += getKeys(tid, node, resultKeys + cnt, resultValues + cnt);
         }
 
-        // Explore subtrees based on timestamp and range.
+        // Explore subtrees with DFS based on timestamp and range.
         nodeptr left = node->rqbundle[0]->getPtrByTimestamp(ts);
         nodeptr right = node->rqbundle[1]->getPtrByTimestamp(ts);
         if (left != nullptr && lo < node->key) {

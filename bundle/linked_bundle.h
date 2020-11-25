@@ -1,10 +1,17 @@
+// Jacob Nelson
+//
+// This file implements a bundle as a linked list of bundle entries. A bundle is
+// prepared by CASing the head of the bundle to a pending entry.
+
 #ifndef BUNDLE_LINKED_BUNDLE_H
 #define BUNDLE_LINKED_BUNDLE_H
 
 #include <pthread.h>
 #include <sys/types.h>
+
 #include <atomic>
 #include <mutex>
+
 #include "common_bundle.h"
 #include "plaf.h"
 #include "rq_debugging.h"
@@ -65,7 +72,7 @@ class Bundle : public BundleInterface<NodeType> {
     BundleEntry<NodeType> *next;
     while (curr != tail_) {
       next = curr->next_;
-      free(curr);
+      delete curr;
       curr = next;
     }
     delete tail_;
@@ -98,6 +105,7 @@ class Bundle : public BundleInterface<NodeType> {
     }
   }
 
+  // Labels the pending entry to make it visible to range queries.
   inline void finalize(timestamp_t ts) override {
     BundleEntry<NodeType> *entry = head_;
     assert(entry->ts_ == BUNDLE_PENDING_TIMESTAMP);

@@ -27,6 +27,7 @@
 
 #include <signal.h>
 #include <stdbool.h>
+
 #include <sstream>
 #include <stack>
 #include <unordered_set>
@@ -53,6 +54,11 @@ struct node_t {
   bool marked;
 
   Bundle<node_t<K, V>>* rqbundle[2];
+
+  ~node_t() {
+    delete rqbundle[0];
+    delete rqbundle[1];
+  }
 
   bool validate() {
     bool valid = true;
@@ -247,8 +253,8 @@ class bundle_citrustree {
         left_total += left;
         right_total += right;
 
-        delete left_entries;
-        delete right_entries;
+        delete [] left_entries;
+        delete [] right_entries;
       }
     }
 

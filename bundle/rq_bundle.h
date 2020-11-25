@@ -1,3 +1,10 @@
+// Jacob Nelson
+//
+// This file contains the implementation of the bundle range query provider. It
+// follows a similar principle to the RQProviders implemented by Arbel-Raviv and
+// Brown. Updates are responsible for calling the required APIs to prepare and
+// finalize the bundles.
+
 #ifndef BUNDLE_RQ_BUNDLE_H
 #define BUNDLE_RQ_BUNDLE_H
 
@@ -19,11 +26,9 @@
 
 // NOTES ON IMPLEMENTATION DETAILS.
 // --------------------------------
-// The active RQ array is now the number of processes allowed to accomodate
-// any number of range query threads. Snapshots are still taken by iterating
-// over the list. For now, we iterate over the entire list but there is room
-// for optimizations here (i.e., maintin number of active RQs and map the tid
-// to the next slot in array).
+// The active RQ array is the total number of processes to accomodate any
+// number of range query threads. Snapshots are still taken by iterating over
+// the list.
 
 // Ensures consistent view of data structure for range queries by augmenting
 // updates to keep track of their linearization points and observe any active
@@ -80,7 +85,8 @@ class RQProvider {
   RQProvider(const int num_processes, DataStructure *ds, RecordManager *recmgr)
       : num_processes_(num_processes), ds_(ds), recmgr_(recmgr) {
     if (num_processes > MAX_TID_POW2) {
-      cerr << "num_processes (" << num_processes << ") > maxthreads_pow2 (" << MAX_TID_POW2 << "): Please increase maxthreads_pow2 in config.mk"
+      cerr << "num_processes (" << num_processes << ") > maxthreads_pow2 ("
+           << MAX_TID_POW2 << "): Please increase maxthreads_pow2 in config.mk";
       exit(1);
     }
     rq_thread_data_ = new __rq_thread_data[num_processes];
@@ -90,6 +96,7 @@ class RQProvider {
     }
     curr_timestamp_ = BUNDLE_MIN_TIMESTAMP;
 
+// Launches a background thread to handle bundle entry cleanup.
 #ifdef BUNDLE_CLEANUP_BACKGROUND
     cleanup_args_ = new cleanup_args{&stop_cleanup_, ds_, num_processes_ - 1};
     if (pthread_create(&cleanup_thread_, nullptr, cleanup_run,
@@ -116,8 +123,6 @@ class RQProvider {
     delete[] rq_thread_data_;
   }
 
-  // Initializes a thread and registers as an range query thread if it will
-  // perform range queries.
   void initThread(const int tid) {
     if (init_[tid])
       return;
@@ -131,14 +136,6 @@ class RQProvider {
     else
       init_[tid] = !init_[tid];
   }
-
-  void initBundle(int tid, Bundle<NodeType> &bundle, long k) {
-    // bundle = Bundle<NodeType>();
-
-    SOFTWARE_BARRIER;
-  }
-
-  void deinitBundle(int tid, Bundle<NodeType> *bundle) { delete bundle; }
 
   inline void physical_deletion_succeeded(const int tid,
                                           NodeType *const *const deletedNodes) {
@@ -167,10 +164,6 @@ class RQProvider {
     return oldest_active;
   }
 
-  void startCleanup() {}
-
-  void stopCleanup() {}
-
  private:
 #ifdef BUNDLE_CLEANUP_BACKGROUND
   static void *cleanup_run(void *args) {
@@ -185,6 +178,8 @@ class RQProvider {
   }
 #endif
 
+  // Atomically increments the global timestamp and returns the new value to the
+  // caller.
   inline timestamp_t get_update_lin_time(int tid) {
 #ifndef BUNDLE_UNSAFE_BUNDLE
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
