@@ -2,7 +2,7 @@
 #
 # Run script for the micro benchmark experiments.
 #
-# Author: Trevor Brown
+# Author: Trevor Brown (updated by Jacob Nelson)
 
 source ../config.mk
 
@@ -33,7 +33,7 @@ if [ "$#" -eq "1" ]; then
   prefill_and_time="-t ${millis}"
 else
   testingmode=0
-  millis=3000
+  millis=1000
   prefill_and_time="-p -t ${millis}"
 fi
 
@@ -42,7 +42,8 @@ cnt2=$(expr $cnt2 \* $trials)
 echo "Performing $cnt2 trials..."
 
 secs=$(expr $millis / 1000)
-estimated_secs=$(expr $cnt2 \* $secs)
+estimated_millis=$(expr $cnt2 \* $millis)
+estimated_secs=$(expr $estimated_millis / 1000)
 estimated_hours=$(expr $estimated_secs / 3600)
 estimated_mins=$(expr $estimated_secs / 60)
 estimated_mins=$(expr $estimated_mins % 60)
@@ -96,6 +97,3 @@ if [ "$(cat warnings.txt | wc -l)" -ne 0 ]; then
   echo "NOTE: THERE WERE WARNINGS. PRINTING THEM..."
   cat warnings.txt
 fi
-
-mv results.db results.db.old
-python create_db.py

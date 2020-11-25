@@ -5,6 +5,9 @@ from plotly import subplots
 from plot_util import *
 import argparse
 
+## The following is necessary to get plotly's export feature to play nicely with Anaconda.
+plotly.io.orca.config.executable = '/usr/local/anaconda3/envs/bundledrefs/bin/orca'
+
 
 def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=False, save=False):
     """ Generates a plot showing throughput as a function of number of threads
@@ -14,18 +17,18 @@ def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=Fa
         os.path.join(dirpath, 'workloads'), ds, ntrials)
     csv = CSVFile(csvfile)
 
-    # Provide column labels for desired x and y axis
+    ## Provide column labels for desired x and y axis
     x_axis = 'wrk_threads'
     y_axis = 'tot_thruput'
 
-    # Init data store
+    ## Init data store
     data = {}
 
-    # Ignores rows in .csv with the following label
+    ## Ignores rows in .csv with the following label
     ignore = ['ubundle']
     algos = [k for k in plotconfig.keys() if k not in ignore]
 
-    # Read in data for each algorithm
+    ## Read in data for each algorithm
     for a in algos:
         data[a] = {}
         data[a] = csv.getdata(x_axis, y_axis, ['list', 'max_key', 'u_rate', 'rq_rate'], [
@@ -73,7 +76,7 @@ def plot_workload(dirpath, ds, max_key, u_rate, rq_rate, ylabel=False, legend=Fa
 
     # Print speedup for paper.
     ignore = ['ubundle']
-    testalgo = 'rlu'
+    testalgo = 'unsafe'
     overalgos = [k for k in plotconfig.keys() if (
         k not in ignore and k != testalgo)]
     print('Speedup for ' + ds + ' @ ' + str(u_rate) + '% updates')
@@ -481,7 +484,11 @@ def plot_extremes2(dirpath, ds, max_key, legend=False):
     # fig.write_image('./figures/extremes.pdf')
 
 
-def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
+def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False):
+    if not os.path.exists(os.path.join(dirpath, 'data.csv')):
+        subprocess.call('./macrobench/make_csv.sh ' + os.path.join(dirpath,
+                                                                   'summary.txt') + ' ' + os.path.join(dirpath, 'data.csv'), shell=True)
+
     reset_base_config()
     csv = CSVFile(os.path.join(dirpath, 'data.csv'))
     data = {}
@@ -517,8 +524,8 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
         y_axis_layout_['title']['font']['size'] = 50
     else:
         y_axis_layout_['title'] = None
-    legend_layout_ = {'font': legend_font_, 'orientation': 'v',
-                      'x': 0, 'y': 1.3}
+    legend_layout_ = {'font': legend_font_, 'orientation': 'h',
+                      'x': 0, 'y': 1.15} if legend else {}
     # legend_layout_['font']['size'] = 40
     layout_['legend'] = legend_layout_
     layout_['width'] = 750
@@ -541,8 +548,10 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False):
         fig.add_trace(go.Scatter(
             x=x_[0::2], y=y_[0::2], name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
 
-    # fig.show()
-    fig.write_image('./figures/'+ds+'-macrobench.pdf')
+    if not save:
+        fig.show()
+    else:
+        fig.write_image('./figures/'+ds+'-macrobench.pdf')
 
 
 def plot_relaxation(dirpath, ds, max_key, ylabel=False, legend=False):
@@ -784,27 +793,36 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--save_plots', action='store_true',
                         default=False, dest='save_plots')
+    parser.add_argument('--microbench', action='store_true', default=True, dest='microbench')
+    parser.add_argument('--macrobench', action='store_true', default=False, dest='macrobench')
     args = parser.parse_args()
 
-    # Experiment 0 features an even distribution of updates and range queries, with varied RQ lengths.
-    dirpath = os.path.join(rootdir, 'data')
+    print(os.path.curdir)
 
     if not os.path.exists('./figures'):
         os.mkdir('./figures')
 
-    # datastructures = ['lazylist', 'skiplistlock', 'citrus']
-    datastructures = ['skiplistlock']
-    max_keys_dict = {'lazylist': 10000,
-                     'skiplistlock': 100000, 'citrus': 100000}
-    rqrate = 50 
-    urates = [0, 2, 10, 50, 90, 100]
+    ## Plot microbench results.
+    if args.microbench:
+        microbench_dir = 'microbench/data'
 
-    for ds in datastructures:
-        for u in urates:
-            plot_workload(
-                dirpath, ds, max_keys_dict[ds], u, rqrate, True, True, args.save_plots)
+        # datastructures = ['lazylist', 'skiplistlock', 'citrus']
+        datastructures = ['skiplistlock']
+        max_keys_dict = {'lazylist': 10000,
+                         'skiplistlock': 100000, 'citrus': 100000}
+        rqrate = 10 
+        urates = [0, 2, 10, 50, 90, 100]
 
-    plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
-                    'SKIPLISTLOCK', ylabel=True, legend=False, save=args.save_plots)
-    plot_macrobench(os.path.join(rootdir, 'macrobench', 'rq100'),
-                    'CITRUS', ylabel=False, legend=True, save=args.save_plots)
+        for ds in datastructures:
+            for u in urates:
+                plot_workload(
+                    microbench_dir, ds, max_keys_dict[ds], u, rqrate, True, True, args.save_plots)
+                pass
+
+    ## Plot macrobench results.
+    if args.macrobench:
+        macrobench_dir = 'macrobench/data'
+        plot_macrobench(os.path.join(macrobench_dir, 'rq_tpcc'),
+                        'SKIPLISTLOCK', ylabel=True, legend=True, save=args.save_plots)
+        plot_macrobench(os.path.join(macrobench_dir, 'rq_tpcc'),
+                        'CITRUS', ylabel=True, legend=True, save=args.save_plots)

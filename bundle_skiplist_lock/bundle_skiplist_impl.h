@@ -69,14 +69,14 @@ static int sl_randomLevel(const int tid, Random* const threadRNGs) {
 template <typename K, typename V, class RecordMgr>
 void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
                                                 K key, V value, int height) {
+  p_node->rqbundle = new Bundle<node_t<K, V>>();
+  p_node->rqbundle->init();
   p_node->key = key;
   p_node->val = value;
   p_node->topLevel = height;
   p_node->lock = 0;
   p_node->marked = (long long)0;
   p_node->fullyLinked = (long long)0;
-  p_node->rqbundle = new Bundle<node_t<K, V>>();
-  p_node->rqbundle->init();
 }
 
 template <typename K, typename V, class RecordMgr>
@@ -134,11 +134,6 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
       KEY_MIN(_KEY_MIN),
       KEY_MAX(_KEY_MAX),
       NO_VALUE(NO_VALUE) {
-  rqProvider =
-      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
-                     RecManager, true, false>(numProcesses, this, recmgr);
-
-  // note: initThread calls rqProvider->initThread
 
   int i;
   const int dummyTid = 0;
@@ -146,15 +141,17 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
 
   p_tail = allocateNode(dummyTid);
   initNode(dummyTid, p_tail, KEY_MAX, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  p_tail->fullyLinked = 1;
 
   p_head = allocateNode(dummyTid);
   initNode(dummyTid, p_head, KEY_MIN, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
-  p_head->fullyLinked = 1;
 
   for (i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
     p_head->p_next[i] = p_tail;
   }
+
+  rqProvider =
+      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
+                     RecManager, true, false>(numProcesses, this, recmgr);
 }
 
 template <typename K, typename V, class RecManager>
@@ -318,38 +315,42 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
                     ((long long)p_new_node) % (1 << 12));
 #endif
       initNode(tid, p_new_node, key, value, topLevel);
-      sl_node_lock(p_new_node);
-
-      // Initialize bundle with the lowest level pointer.
       p_new_node->topLevel = topLevel;
       for (level = 0; level <= topLevel; level++) {
         p_new_node->p_next[level] = p_succs[level];
       }
+
+      // Bundle preparation must occur before the node is connected.
+      Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle,
+                                         p_new_node->rqbundle, nullptr};
+      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
+      rqProvider->prepare_bundles(bundles, ptrs);
+
       SOFTWARE_BARRIER;
       for (level = 0; level <= topLevel; level++) {
         p_preds[level]->p_next[level] = p_new_node;
       }
-      Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle,
-                                         p_new_node->rqbundle, nullptr};
-      nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
-      rqProvider->linearize_update_at_write(
-          tid, &p_new_node->fullyLinked, (long long)1, bundles, ptrs, INSERT);
-      if (!p_preds[0]->validate()) {
-        // std::cout << "Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
-        //           << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-        //           << p_preds[0]->p_next[0]
-        //           << " vs. [key=" <<
-        //           p_preds[0]->rqbundle->getHead()->ptr_->key
-        //           << ",marked=" <<
-        //           p_preds[0]->rqbundle->getHead()->ptr_->marked
-        //           << "] " << p_preds[0]->rqbundle->dump(0) << std::flush;
-        exit(1);
-      }
+      timestamp_t lin_time = rqProvider->linearize_update_at_write(
+          tid, &p_new_node->fullyLinked, (long long)1);
+      rqProvider->finalize_bundles(bundles, lin_time);
+      // if (!p_preds[0]->validate()) {
+      //   timestamp_t unused_ts;
+      //   std::cout << "[INSERT] Pointer mismatch! [key="
+      //             << p_preds[0]->p_next[0]->key
+      //             << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+      //             << p_preds[0]->p_next[0]
+      //             << " vs. [key=" <<
+      //             p_preds[0]->rqbundle->first(unused_ts)->key
+      //             << ",marked="
+      //             << p_preds[0]->rqbundle->first(unused_ts)->marked << "] "
+      //             << p_preds[0]->rqbundle->first(unused_ts) << " "
+      //             << p_preds[0]->rqbundle->dump(0) << std::flush;
+      //   exit(1);
+      // }
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
 #endif
       // p_new_node->fullyLinked = 1;
-      sl_node_unlock(p_new_node);
       done = 1;
     }
 
@@ -360,6 +361,7 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
         sl_node_unlock(p_preds[level]);
       }
     }
+
     recmgr->enterQuiescentState(tid);
   }
   return ret;
@@ -423,23 +425,24 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
       if (valid) {
         Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle, nullptr};
         nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
-        rqProvider->linearize_update_at_write(
-            tid, &p_victim->marked, (long long)1, bundles, ptrs, REMOVE);
+        rqProvider->prepare_bundles(bundles, ptrs);
+        timestamp_t lin_time = rqProvider->linearize_update_at_write(
+            tid, &p_victim->marked, (long long)1);
+        rqProvider->finalize_bundles(bundles, lin_time);
         for (level = topLevel; level >= 0; level--) {
           p_preds[level]->p_next[level] = p_victim->p_next[level];
         }
         nodeptr deletedNodes[] = {p_victim, nullptr};
         rqProvider->physical_deletion_succeeded(tid, deletedNodes);
         if (!p_preds[0]->validate()) {
-          // std::cout << "Pointer mismatch! [key=" <<
-          // p_preds[0]->p_next[0]->key
-          //           << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-          //           << p_preds[0]->p_next[0] << " vs. [key="
-          //           << p_preds[0]->rqbundle->getHead()->ptr_->key <<
-          //           ",marked="
-          //           << p_preds[0]->rqbundle->getHead()->ptr_->marked << "] "
-          //           << p_preds[0]->rqbundle->getHead()->ptr_ << " "
-          //           << p_preds[0]->rqbundle->dump(0) << std::flush;
+          timestamp_t unused_ts;
+          nodeptr bundle_head = p_preds[0]->rqbundle->first(unused_ts);
+          std::cout << "[DELETE " << p_victim
+                    << "] Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
+                    << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
+                    << p_preds[0]->p_next[0] << " vs. [key=" << bundle_head->key
+                    << ",marked=" << bundle_head->marked << "] " << bundle_head
+                    << " " << p_preds[0]->rqbundle->dump(0) << std::flush;
           exit(1);
         }
         ret = p_victim->val;

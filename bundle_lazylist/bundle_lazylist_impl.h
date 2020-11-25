@@ -15,6 +15,7 @@
 
 #include <cassert>
 #include <csignal>
+
 #include "bundle_lazylist.h"
 #include "locks_impl.h"
 
@@ -34,7 +35,9 @@ class node_t {
                // used with the lock-free RQProvider (which requires all fields
                // that are modified at linearization points of operations to be
                // at least as large as a machine word)
-  Bundle<node_t<K,V>>* rqbundle;
+  Bundle<node_t<K, V>>* rqbundle;
+
+  ~node_t() { delete rqbundle; }
 
   template <typename RQProvider>
   bool isMarked(const int tid, RQProvider* const prov) {
@@ -74,8 +77,10 @@ bundle_lazylist<K, V, RecManager>::bundle_lazylist(const int numProcesses,
   // Perform linearization of max to ensure bundles correctly added.
   Bundle<node_t<K, V>>* bundles[] = {head->rqbundle, nullptr};
   nodeptr ptrs[] = {max, nullptr};
-  rqProvider->linearize_update_at_write(tid, &head->next, max, bundles, ptrs,
-                                        INSERT);
+  rqProvider->prepare_bundles(bundles, ptrs);
+  timestamp_t lin_time =
+      rqProvider->linearize_update_at_write(tid, &head->next, max);
+  rqProvider->finalize_bundles(bundles, lin_time);
 }
 
 template <typename K, typename V, class RecManager>
@@ -216,8 +221,10 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       Bundle<node_t<K, V>>* bundles[] = {newnode->rqbundle, pred->rqbundle,
                                          nullptr};
       nodeptr ptrs[] = {curr, newnode, nullptr};
-      rqProvider->linearize_update_at_write(tid, &pred->next, newnode, bundles,
-                                            ptrs, INSERT);
+      rqProvider->prepare_bundles(bundles, ptrs);
+      timestamp_t lin_time =
+          rqProvider->linearize_update_at_write(tid, &pred->next, newnode);
+      rqProvider->finalize_bundles(bundles, lin_time);
       releaseLock(&(pred->lock));
       recordmgr->enterQuiescentState(tid);
       return result;
@@ -261,8 +268,10 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
 
       Bundle<node_t<K, V>>* bundles[] = {pred->rqbundle, nullptr};
       nodeptr ptrs[] = {c_nxt, nullptr};
-      rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL, bundles,
-                                            ptrs, REMOVE);
+      rqProvider->prepare_bundles(bundles, ptrs);
+      timestamp_t lin_time =
+          rqProvider->linearize_update_at_write(tid, &curr->marked, 1LL);
+      rqProvider->finalize_bundles(bundles, lin_time);
 
       pred->next = c_nxt;
       nodeptr deletedNodes[] = {curr, nullptr};

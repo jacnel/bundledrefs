@@ -1,3 +1,8 @@
+// Jacob Nelson
+//
+// This file defines the standard interface for a bundle. It is used by the
+// bundle range query provider to ensure linearizable range queries.
+
 #ifndef BUNDLE_COMMON_BUNDLE_H
 #define BUNDLE_COMMON_BUNDLE_H
 

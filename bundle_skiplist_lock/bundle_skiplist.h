@@ -48,6 +48,8 @@ class node_t {
     Bundle<node_t>* rqbundle;
   };
 
+  ~node_t() { delete rqbundle; }
+
   bool validate() {
     timestamp_t ts;
     return p_next[0] == rqbundle->first(ts);
@@ -211,13 +213,13 @@ class bundle_skiplist {
       if (result.second && curr->key != KEY_MAX) {
         int size;
         std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle->get(size);
-// #ifdef NO_FREE
-//         for (int i = 0; i < size; ++i) {
-//           s.push(entries[i].first);
-//         }
-// #else
+        // #ifdef NO_FREE
+        //         for (int i = 0; i < size; ++i) {
+        //           s.push(entries[i].first);
+        //         }
+        // #else
         s.push(entries[0].first);
-// #endif
+        // #endif
 
         if (size > max) {
           max = size;

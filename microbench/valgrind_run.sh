@@ -10,7 +10,7 @@ source ../config.mk
 source ./supported.inc
 
 nwork=`expr $maxthreads - 1`
-args="-i 10 -d 10 -k 1000 -rq 2 -rqsize 100 -t 1000 -nrq 1 -nwork $nwork"
+args="-i 10 -d 10 -k 1000 -rq 2 -rqsize 100 -t 1000 -nrq 0 -nwork $nwork"
 machine=`hostname`
 
 highest=0

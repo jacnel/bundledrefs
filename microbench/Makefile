@@ -7,7 +7,7 @@ FLAGS += -g
 #FLAGS += -DNDEBUG
 FLAGS += $(PLAF)
 FLAGS += -DUSE_GSTATS
-FLAGS += -DNO_FREE
+#FLAGS += -DNO_FREE
 #FLAGS += -DUSE_STL_HASHLIST
 FLAGS += -DUSE_SIMPLIFIED_HASHLIST
 #FLAGS += -DRAPID_RECLAMATION
@@ -38,7 +38,6 @@ FLAGS += -DINSERT_FUNC=insertIfAbsent
 
 # Include bundle configuration macros
 include bundle.mk
-
 
 LDFLAGS = -L../lib
 LDFLAGS += -I../
@@ -74,7 +73,6 @@ LDFLAGS += -I../unsafe/skiplist_lock/
 LDFLAGS += -I../unsafe/citrus/
 # -------------------------
 
-
 LDFLAGS += -lpthread
 LDFLAGS += -ldl
 LDFLAGS += -lnuma
@@ -82,31 +80,31 @@ LDFLAGS += -lpapi
 
 machine=$(shell hostname)
 
-all: abtree bslack bst lazylist lflist citrus rlu skiplistlock bundle
+all: abtree bslack bst lazylist lflist citrus rlu skiplistlock lbundle ubundle
 
 thispath=
 
-.PHONY: abtree abtree.rq_lockfree abtree.rq_rwlock abtree.rq_htm_rwlock abtree.rq_unsafe
-abtree: abtree.rq_lockfree abtree.rq_rwlock abtree.rq_htm_rwlock abtree.rq_unsafe
-abtree.rq_lockfree:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-abtree.rq_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-abtree.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-abtree.rq_unsafe:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# .PHONY: abtree abtree.rq_lockfree abtree.rq_rwlock abtree.rq_htm_rwlock abtree.rq_unsafe
+# abtree: abtree.rq_lockfree abtree.rq_rwlock abtree.rq_htm_rwlock abtree.rq_unsafe
+# abtree.rq_lockfree:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# abtree.rq_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# abtree.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# abtree.rq_unsafe:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DABTREE -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
-.PHONY: bslack bslack.rq_lockfree bslack.rq_rwlock bslack.rq_htm_rwlock bslack.rq_unsafe
-bslack: bslack.rq_lockfree bslack.rq_rwlock bslack.rq_htm_rwlock bslack.rq_unsafe
-bslack.rq_lockfree:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-bslack.rq_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-bslack.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-bslack.rq_unsafe:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# .PHONY: bslack bslack.rq_lockfree bslack.rq_rwlock bslack.rq_htm_rwlock bslack.rq_unsafe
+# bslack: bslack.rq_lockfree bslack.rq_rwlock bslack.rq_htm_rwlock bslack.rq_unsafe
+# bslack.rq_lockfree:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# bslack.rq_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# bslack.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# bslack.rq_unsafe:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBSLACK -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: lazylist lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_htm_rwlock lazylist.rq_unsafe
 lazylist: lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_htm_rwlock lazylist.rq_unsafe
@@ -114,24 +112,24 @@ lazylist.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 lazylist.rq_rwlock:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-lazylist.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# lazylist.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 # lazylist.rq_unsafe:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 
-.PHONY: lflist lflist.rq_lockfree lflist.rq_rwlock lflist.rq_htm_rwlock lflist.rq_unsafe lflist.rq_snapcollector
-lflist: lflist.rq_lockfree lflist.rq_rwlock lflist.rq_htm_rwlock lflist.rq_unsafe lflist.rq_snapcollector
-lflist.rq_lockfree:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-lflist.rq_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-lflist.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-lflist.rq_unsafe:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-lflist.rq_snapcollector:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_SNAPCOLLECTOR $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# .PHONY: lflist lflist.rq_lockfree lflist.rq_rwlock lflist.rq_htm_rwlock lflist.rq_unsafe lflist.rq_snapcollector
+# lflist: lflist.rq_lockfree lflist.rq_rwlock lflist.rq_htm_rwlock lflist.rq_unsafe lflist.rq_snapcollector
+# lflist.rq_lockfree:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# lflist.rq_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# lflist.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# lflist.rq_unsafe:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# lflist.rq_snapcollector:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLFLIST -DRQ_SNAPCOLLECTOR $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: skiplistlock skiplistlock.rq_lockfree skiplistlock.rq_rwlock skiplistlock.rq_htm_rwlock skiplistlock.rq_unsafe skiplistlock.rq_snapcollector
 skiplistlock: skiplistlock.rq_lockfree skiplistlock.rq_rwlock skiplistlock.rq_htm_rwlock skiplistlock.rq_unsafe skiplistlock.rq_snapcollector
@@ -139,23 +137,23 @@ skiplistlock.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 skiplistlock.rq_rwlock:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-skiplistlock.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# skiplistlock.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 # skiplistlock.rq_unsafe:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 skiplistlock.rq_snapcollector:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DSKIPLISTLOCK -DRQ_SNAPCOLLECTOR $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
-.PHONY: bst bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe
-bst: bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe
-bst.rq_lockfree:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
-bst.rq_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(;ilesuffix).out $(xargs) -DBST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-bst.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-bst.rq_unsafe:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# .PHONY: bst bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe
+# bst: bst.rq_lockfree bst.rq_rwlock bst.rq_htm_rwlock bst.rq_unsafe
+# bst.rq_lockfree:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# bst.rq_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(;ilesuffix).out $(xargs) -DBST -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# bst.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# bst.rq_unsafe:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DBST -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
 .PHONY: citrus citrus.rq_lockfree citrus.rq_rwlock citrus.rq_htm_rwlock citrus.rq_unsafe
 citrus: citrus.rq_lockfree citrus.rq_rwlock citrus.rq_htm_rwlock citrus.rq_unsafe
@@ -163,8 +161,8 @@ citrus.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 citrus.rq_rwlock:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
-citrus.rq_htm_rwlock:
-	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
+# citrus.rq_htm_rwlock:
+# 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_HTM_RWLOCK $(pinning) $(thispath)main.cpp $(LDFLAGS)
 # citrus.rq_unsafe:
 # 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DCITRUS -DRQ_UNSAFE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
@@ -193,6 +191,7 @@ skiplistlock.rq_ubundle:
 citrus.rq_ubundle:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_UNSAFE_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
+## The following is an experimental bundle implementation that uses a circular buffer instead of a linked list.
 .PHONY: cbundle lazylist.rq_cbundle skiplistlock.rq_cbundle citrus.rq_cbundle
 cbundle: lazylist.rq_cbundle skiplistlock.rq_cbundle citrus.rq_cbundle
 lazylist.rq_cbundle:
@@ -202,7 +201,6 @@ skiplistlock.rq_cbundle:
 citrus.rq_cbundle:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DRQ_BUNDLE -DBUNDLE_CIRCULAR_BUNDLE -DBUNDLE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
 
-
 .PHONY: unsafe lazylist.rq_unsafe skiplistlock.rq_unsafe citrus.rq_unsafe
 unsafe: lazylist.rq_unsafe skiplistlock.rq_unsafe citrus.rq_unsafe
 lazylist.rq_unsafe:
@@ -211,3 +209,7 @@ skiplistlock.rq_unsafe:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_SKIPLIST $(pinning) $(thispath)main.cpp $(LDFLAGS)
 citrus.rq_unsafe:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DUNSAFE_CITRUS $(pinning) $(thispath)main.cpp $(LDFLAGS)
+
+.PHONY: clean
+clean:
+	rm *.out
