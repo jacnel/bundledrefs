@@ -554,6 +554,8 @@ if __name__ == "__main__":
 
         for ds in datastructures:
             for u in urates:
+                if u == 100:
+                    rqrate = 0
                 plot_workload(
                     microbench_dir, ds, max_keys_dict[ds], u, rqrate, True, True, args.save_plots)
                 pass
