@@ -14,7 +14,7 @@ source ./supported.inc
 
 ## Abridged experimental configurations (for artifact evaluation)
 rqtechniques="lockfree rwlock unsafe rlu lbundle"
-datastructures="skiplistlock"
+datastructures="skiplistlock citrus"
 ksizes="100000"
 
 ## All configurations.

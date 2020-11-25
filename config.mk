@@ -17,10 +17,10 @@
 # cpu_freq_ghz=1.2
 
 ## The following was used for our experiments.
-maxthreads=8
+maxthreads=64
 maxthreads_powerof2=256
 maxrqthreads=8
-threadincrement=48
+threadincrement=16
 cpu_freq_ghz=2.1
 
 ## Configure the thread pinning/binding policy (see README.txt)
