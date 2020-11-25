@@ -280,7 +280,11 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False):
                    'line': {'color': 'black', 'width': 5 if not legend else 3}}
         name_ = '<b>' + plotconfig[algo]['label'] + '</b>'
         fig.add_trace(go.Scatter(
-            x=x_[0::2], y=y_[0::2], name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
+            x=x_, y=y_, name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
+
+        ## Uncommenting below and commenting above will include fewer points on the plot
+        # fig.add_trace(go.Scatter(
+        #     x=x_[0::2], y=y_[0::2], name=name_, mode='markers+lines', marker=marker_, line=line_, showlegend=legend))
 
     if not save:
         fig.show()

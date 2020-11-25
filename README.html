@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Bundled References</title>
+        <style>
+</style>
+        
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item { list-style-type: none; } .task-list-item-checkbox { margin-left: -20px; vertical-align: middle; }
+</style>
+        
+        
+        
+    </head>
+    <body class="vscode-body vscode-light">
+        <h1 id="bundled-references">Bundled References</h1>
+<p>In this paper we address the challenge of providing linearizablerange query operations for linked data structures by introducing a new building block; we call bundled references. Using bundled references provides range queries with a path through the data structure consistent with their linearization point. Our design guarantees that range queries only traverse nodes belonging to their snapshot and that they never block writers. With multi-version concurrencycontrol (MVCC) in mind, we implement our technique in three data structures. The experimental evaluation of our bundled linkedlist, skip list, and binary search tree, including their integration as indexes in the DBx1000 in-memory database, shows up to 20% improvement over state-of-the-art techniques to provide linearizable range queries, as well as a more consistent performance profile across a variety of workloads</p>
+<h1 id="implementation-notes">Implementation notes</h1>
+<p>This work graciously builds on a benchmark developed by Arbel-Raviv and Brown's work (<a href="https://bitbucket.org/trbot86/implementations/src/master/cpp/range_queries/">https://bitbucket.org/trbot86/implementations/src/master/cpp/range_queries/</a>) to provide linearizable range queries in linked data structures. We use their codebase as a starting point, and integrate our technique into their benchmark. The core of our bundling implementation is contained in the 'bundle' directory, which implements the global structures as well as necessary functions of bundling. The three data structures we implement are found in 'bundled_*' directories. The scripts necessary to produce the plots found in our paper are included under the 'microbench' directory.</p>
+<h1 id="getting-started-guide">Getting Started Guide</h1>
+<p>The remainder of this document intendeds to support an artifact evaluation for the paper &quot;Bundled References: An Abstraction for Highly-Concurrent Linearizable Range Queries&quot; by Jacob Nelson, Ahmed Hasan and Roberto Palmieri. As stated above, our contributions with respect to the paper are contained in the directories prefixed with &quot;bundle&quot;.</p>
+<p><code>bundle</code> implements the bundling interface as a linked list of bundle entries. In addition to the linked list bundle, there is an experimental cirular buffer bundle (not included in the paper) as well as an unsafe version that eliminates the overhead of ensuring bundle consistency for comparison.</p>
+<p><code>bundle_lazylist</code>, <code>bundle_skiplistlock</code> and <code>bundle_citrus</code> each implement a data structure to which we apply bundling. Note that we do not apply our technique to the remaining data structures (which are lock-free) because our current bundling implementation would impose blocking.</p>
+<p>The experiments that we report in the paper are located in the following directories.</p>
+<ul>
+<li><code>microbench</code> tests each data structure in isolation.</li>
+<li><code>macrobench</code> ports DBx1000 to include the implemented data structures.</li>
+</ul>
+<h2 id="requirements">Requirements</h2>
+<p>The experiments from the paper were executed on a 4-socket machine with Intel Xeon Platinum 8160 processors running Red Hat Enterprise 7.6. However, we also successfully tested on a dual-socket machine with Intel Xeon E5-2630 v3 processors running Ubuntu 18.04. The C++ libraries are requried to build and run the experiments, while the Python libraries are used for plotting results.</p>
+<p><em>C++ Libraries</em>:</p>
+<ul>
+<li>libnuma (e.g., <code>sudo apt install libnuma-dev</code>)</li>
+<li>libjemalloc (included in 'lib'</li>
+</ul>
+<p><em>Python libraries</em>:</p>
+<ul>
+<li>python (&gt;= v3.6)</li>
+<li>plotly (v4.12.0)</li>
+<li>plotly-orca (v1.3.1)</li>
+<li>psutils (v5.7.2)</li>
+<li>requests (v2.24.0)</li>
+<li>pandas (v1.1.3)</li>
+</ul>
+<p>Note: any warnings regarding hardware transactional memory (HTM) can be safely ignored since we do not compare with this competitor.</p>
+<h2 id="kicking-the-tires">Kicking the Tires</h2>
+<p>Once the C++ dependencies have been installed, you can begin to test the microbenchmark. First, configure the build with the <code>config.mk</code> file using the instructions provided there. Then, build the binaries for each of the data structures and range query techniques with the following:</p>
+<pre><code><code><div>cd microbench
+make -j lazylist skiplistlock citrus rlu lbundle unsafe
+</div></code></code></pre>
+<p>The first three arguments to the <code>make</code> command (i.e., <code>lazylist</code>, <code>skiplistlock</code>, <code>citrus</code>) build the EBR-based approach from Arbel-Raviv and Brown. The next argument (i.e., <code>rlu</code>) builds the RLU-based lazy-list and Citrus tree. The fifth argument (i.e., <code>lbundle</code>) builds the bundled lazy-list, optimistic skip-list and Citrus tree. Finally, the last argument (i.e., unsafe) builds the three data structures of interest with no instrumentation for range queries. Unlike the unsafe implementation provided by Arbel-Raviv and Brown, our implementation does not reclaim memory. We chose to do this because the RLU-based data structures do not utilize epoch-based memory reclamation. As such, our unsafe versions are an upper bound on all range query techniques and provides a more general reference.</p>
+<p>Finally, run individual tests to obtain results for a given configuration. Note that this project uses jemalloc to replace the standard memory allocation. The following command runs a workload of 5% inserts (<code>-i 5</code>), 5% deletes (<code>-d 5</code>), 80% gets and 10% range queries (<code>-rq 10</code>) on a key range of 100000 (<code>-k 100000</code>). Each range query has a range of 50 keys (<code>-rqsize 50</code>) and is prefilled (<code>-p</code>) based on the ratio of inserts and deletes. The execution lasts for 1s (<code>-t 1000</code>). There are no dedicated range query threads (<code>-nrq 0</code>) but there are a total of 8 worker threads (<code>-nwork 8</code>) and they are bound to cores following the bind policy (<code>-bind 0-7,16-23,8-15,24-31</code>).</p>
+<pre><code><code><div>env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so \ 
+./hostname.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 \ 
+-rqsize 50 -p -t 1000 -nrq 0 -nwork 8 -bind 0-7,16-23,8-15,24-31
+</div></code></code></pre>
+<p>The above example assumes a 32-core system. A simple way to follow our bind policy is to execute <code>lscpu</code> and copy the NUMA node CPUs, appending each set of CPUs separated by a comma.</p>
+<p>For more information on the input parameters to the microbenchmark itself see README.txt.old, which was written for the original implementation. We did not change any arguments.</p>
+<h1 id="step-by-step-instructions">Step-by-Step Instructions</h1>
+<h2 id="full-microbenchmark">Full Microbenchmark</h2>
+<p>Our results demonstrate that in mixed workload configurations, and in the presence of range queries, our implementation outperforms the competitors. This can be demonstrated by the running the full microbenchmark using <code>microbench/runscript.sh</code>.</p>
+<p>Assuming that the binaries have already been built during the previous steps, let's generate the plots included in the paper (once the dependencies above are installed). From the root directory, run the following:</p>
+<pre><code><code><div>./runscript.sh
+cd ..
+python plot.py --save_plots --microbench
+</div></code></code></pre>
+<p><code>runscript.sh</code> will run expeirments based on <code>experiment_list_generate.sh</code>, which will write a list of experiments to be run into a file. This generation script can be altered to try out new configurations.</p>
+<p><strong>WARNING</strong>: The experiments can take a long time to run because there are many competitors. We have preconfigured the run to execute a single trial (the paper uses 3), run for 1s (the paper uses 3s), and only test the optimistic skip-list (the paper tests all three data structures). The number of trials and runtime can be configured in <code>runscript.sh</code> and the data structures in <code>experiment_list_generate.sh</code>.</p>
+<p><code>experiment_list_generate.sh</code> includes two experiments. The first, saved under <code>microbench/data/workloads</code> fixes the range query size to 50 and tests various workload configurations. This corresponds to Figure 2 in the paper as well as additional experiments for get-only and update-only workloads. The second, whose results will be written to <code>microbench/data/rq_sizes</code>, executes a 50%-50% update-rq workload at various range query lengths (i.e., 1, 5, 10, 50, 100, 500). This corresponds to Figure 3.</p>
+<p>The default is that both experiments will run, which is estimated at 20 minutes to complete but may take longer because that does not include prefill time.</p>
+<h2 id="macrobenchmark">Macrobenchmark</h2>
+<p>In addition to demonstrating better performance in mixed workloads, we also demonstrate improvements over competitors in index performance when integrated into a database. This can be observed by running the macrobenchmark.</p>
+<p>To build and run the DBx1000 integration, run the following from the root directory:</p>
+<pre><code><code><div>cd ./macrobench
+./compile.sh
+./runscript.sh
+cd ..
+python plot.py --save_plots --macrobench
+</div></code></code></pre>
+<p>In comparison to the microbenchmark, this will take longer to run. We suggest going for a long walk, calling a friend, or taking a nap. Two plots will be generated, one for each of the data structures at various numbers of threads.</p>
+<h2 id="memory-reclamation">Memory Reclamation</h2>
+<p>The initial binaries are built without bundle entry reclamation to match the paper discussion. Whenever a node is deleted its bundle entries are reclaimed but stale bundle entries are not garbage collected. To enable reclamation of bundle entries, uncomment line 11 of <code>bundle.mk</code>. The following line defines the number of nanoseconds that elapse between iterations of the cleanup thread. It is currently set to 100ms.</p>
+<p>Once <code>bundle.mk</code> is updated, remake the the bundled data structures using <code>make -j lbundle</code> and rerun the previously described microbenchmark. Be sure to move the original plots so they are not overwritten when regenerating them.</p>
+
+    </body>
+    </html>

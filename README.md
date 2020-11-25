@@ -46,12 +46,14 @@ cd microbench
 make -j lazylist skiplistlock citrus rlu lbundle unsafe
 ```
 
-The first three arguments to the `make` command (i.e., `lazylist`, `skiplistlock`, `citrus`) build the EBR-based approach from Arbel-Raviv and Brown. The next argument (i.e., `rlu`) builds the RLU-based lazy-list and Citrus tree. The fifth argument (i.e., `lbundle`) builds the linked bundle lazy-list, optimistic skip-list and Citrus tree. Finally, the last argument (i.e., unsafe) builds the three data structures of interest with no instrumentation for range queries. Unlike the unsafe implementation provided by Arbel-Raviv and Brown, our implementation does not reclaim memory. We chose to do this because the RLU-based data structures do not utilize epoch-based memory reclamation. As such, our unsafe versions are an upper bound on all range query techniques and provides a more general reference.
+The first three arguments to the `make` command (i.e., `lazylist`, `skiplistlock`, `citrus`) build the EBR-based approach from Arbel-Raviv and Brown. The next argument (i.e., `rlu`) builds the RLU-based lazy-list and Citrus tree. The fifth argument (i.e., `lbundle`) builds the bundled lazy-list, optimistic skip-list and Citrus tree. Finally, the last argument (i.e., unsafe) builds the three data structures of interest with no instrumentation for range queries. Unlike the unsafe implementation provided by Arbel-Raviv and Brown, our implementation does not reclaim memory. We chose to do this because the RLU-based data structures do not utilize epoch-based memory reclamation. As such, our unsafe versions are an upper bound on all range query techniques and provides a more general reference.
 
 Finally, run individual tests to obtain results for a given configuration. Note that this project uses jemalloc to replace the standard memory allocation. The following command runs a workload of 5% inserts (`-i 5`), 5% deletes (`-d 5`), 80% gets and 10% range queries (`-rq 10`) on a key range of 100000 (`-k 100000`). Each range query has a range of 50 keys (`-rqsize 50`) and is prefilled (`-p`) based on the ratio of inserts and deletes. The execution lasts for 1s (`-t 1000`). There are no dedicated range query threads (`-nrq 0`) but there are a total of 8 worker threads (`-nwork 8`) and they are bound to cores following the bind policy (`-bind 0-7,16-23,8-15,24-31`).
 
 ```
-env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so ./hostname.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 -rqsize 50 -p -t 1000 -nrq 0 -nwork 8 -bind 0-7,16-23,8-15,24-31
+env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so \ 
+./hostname.skiplistlock.rq_lbundle.out -i 5 -d 5 -k 100000 -rq 10 \ 
+-rqsize 50 -p -t 1000 -nrq 0 -nwork 8 -bind 0-7,16-23,8-15,24-31
 ```
 
 The above example assumes a 32-core system. A simple way to follow our bind policy is to execute `lscpu` and copy the NUMA node CPUs, appending each set of CPUs separated by a comma.
@@ -82,6 +84,8 @@ The default is that both experiments will run, which is estimated at 20 minutes 
 
 ## Macrobenchmark
 
+In addition to demonstrating better performance in mixed workloads, we also demonstrate improvements over competitors in index performance when integrated into a database. This can be observed by running the macrobenchmark.
+
 To build and run the DBx1000 integration, run the following from the root directory:
 
 ```
@@ -92,7 +96,7 @@ cd ..
 python plot.py --save_plots --macrobench
 ```
 
-In comparison to the microbenchmark, this will take longer to run. We suggest going for a long walk, calling a friend, or taking a nap.
+In comparison to the microbenchmark, this will take longer to run. We suggest going for a long walk, calling a friend, or taking a nap. Two plots will be generated, one for each of the data structures at various numbers of threads.
 
 ## Memory Reclamation
 

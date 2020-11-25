@@ -1,12 +1,9 @@
-/*
- * File:   bundle_skiplist_lock_impl.h
- * Author: Trevor Brown and Maya Arbel-Raviv
- *
- * This is a heavily modified version of the skip-list packaged with StackTrack
- * (by Alistarh et al.)
- *
- * Created on August 6, 2017, 5:25 PM
- */
+// Jacob Nelson
+//
+// This file contains the implementation of a bundled version of the skip-list
+// provided in the original benchmark by Arbel-Raviv and Brown. It is an
+// optimistic skip-list with lazy locking. We have modified it to utilize our
+// bundle interface to provide linearizable range queries.
 
 #ifndef SKIPLIST_LOCK_IMPL_H
 #define SKIPLIST_LOCK_IMPL_H
@@ -333,20 +330,6 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       timestamp_t lin_time = rqProvider->linearize_update_at_write(
           tid, &p_new_node->fullyLinked, (long long)1);
       rqProvider->finalize_bundles(bundles, lin_time);
-      // if (!p_preds[0]->validate()) {
-      //   timestamp_t unused_ts;
-      //   std::cout << "[INSERT] Pointer mismatch! [key="
-      //             << p_preds[0]->p_next[0]->key
-      //             << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
-      //             << p_preds[0]->p_next[0]
-      //             << " vs. [key=" <<
-      //             p_preds[0]->rqbundle->first(unused_ts)->key
-      //             << ",marked="
-      //             << p_preds[0]->rqbundle->first(unused_ts)->marked << "] "
-      //             << p_preds[0]->rqbundle->first(unused_ts) << " "
-      //             << p_preds[0]->rqbundle->dump(0) << std::flush;
-      //   exit(1);
-      // }
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
 #endif
