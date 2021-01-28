@@ -5,7 +5,7 @@
 #include <sys/types.h>
 #include <atomic>
 #include <mutex>
-#include "common_bundle.h"
+
 #include "plaf.h"
 #include "rq_debugging.h"
 
@@ -44,7 +44,7 @@ template <typename NodeType>
 class BundleEntry : public BundleEntryBase<NodeType> {};
 
 template <typename NodeType>
-class Bundle : public BundleInterface<NodeType> {
+class Bundle : public Bundle<NodeType> {
  private:
   // The lower three bits are reserved for marking an ongoing update, resize or
   // reclaimer. The remaining bits are devoted to keeping track of the number of

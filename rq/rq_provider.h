@@ -24,6 +24,8 @@
 #include "rq_snapcollector.h"
 #elif defined RQ_BUNDLE
 #include "rq_bundle.h"
+#elif defined RQ_VCAS
+#include "rq_vcas.h"
 #else
 #error NO RQ PROVIDER DEFINED
 #endif

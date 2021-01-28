@@ -5,7 +5,7 @@
 ## Helpful flags for debugging.
 # ---------------------------
 # FLAGS += -DBUNDLE_CLEANUP_NO_FREE
-# FLAGS += -DBUNDLE_DEBU
+# FLAGS += -DBUNDLE_DEBUG
 FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 # ---------------------------
 
@@ -21,6 +21,19 @@ FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 # FLAGS += -DBUNDLE_CLEANUP_BACKGROUND
 # FLAGS += -DBUNDLE_CLEANUP_SLEEP=100000  # ns
 # --------------------------
+
+FLAGS += -DBUNDLE_UPDATE_USES_CAS
+
+## Three-phase range query optimzation. Allows range queries to use 
+## the regular pointers for the first (pre-traversal) phase. During 
+## the second (range-entry) phase, the bundles must be followed to
+## ensure that nothing is missed. At this point a range query may 
+## restart if there are no longer any bundles to follow. If it enters
+## the range then it can perform its collect operation without the
+## possibility of restarts.
+# ------------------------.
+FLAGS +=  -DBUNDLE_OPTIMIZE_RQS
+# ------------------------
 
 ## Relaxation optimization. If this is enabled, then threads will 
 ## only increment the global timestamp after TIMSTAMP_RELAXATION 

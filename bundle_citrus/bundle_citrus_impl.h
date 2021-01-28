@@ -37,6 +37,7 @@
 
 #include <utility>
 
+#include "blockbag.h"
 #include "bundle_citrus.h"
 #include "locks_impl.h"
 #include "urcu.h"
@@ -59,10 +60,8 @@ nodeptr bundle_citrustree<K, V, RecManager>::newNode(const int tid, K key,
   nnode->tag[1] = 0;
   nnode->value = value;
   nnode->lock = false;
-  nnode->rqbundle[0] = new Bundle<node_t<K, V>>();
-  nnode->rqbundle[0]->init();
-  nnode->rqbundle[1] = new Bundle<node_t<K, V>>();
-  nnode->rqbundle[1]->init();
+  nnode->rqbundle[0].init();
+  nnode->rqbundle[1].init();
 #ifdef __HANDLE_STATS
   GSTATS_APPEND(tid, node_allocated_addresses, ((long long)nnode) % (1 << 12));
 #endif
@@ -101,7 +100,7 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
   // root, e.g., to perform a cas)
 
   // Prepare bundles for "real" insertion.
-  Bundle<node_t<K, V>>* bundles[] = {_root->rqbundle[0], nullptr};
+  BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&_root->rqbundle[0], nullptr};
   nodeptr ptrs[] = {_rootchild, nullptr};
   rqProvider->prepare_bundles(bundles, ptrs);
 
@@ -224,8 +223,8 @@ retry:
     nodeptr nnode = newNode(tid, key, value);
 
     // Prepare the bundles.
-    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction],
-                                       nnode->rqbundle[0], nnode->rqbundle[1],
+    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction],
+                                       &nnode->rqbundle[0], &nnode->rqbundle[1],
                                        nullptr};
     nodeptr ptrs[] = {nnode, nullptr, nullptr, nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
@@ -296,7 +295,7 @@ retry:
     curr->marked = true;
 
     // Prepare bundles.
-    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
+    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction], nullptr};
     nodeptr ptrs[] = {curr->child[1], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 
@@ -325,7 +324,7 @@ retry:
     curr->marked = true;
 
     // Prepare bundles.
-    Bundle<node_t<K, V>>* bundles[] = {prev->rqbundle[direction], nullptr};
+    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction], nullptr};
     nodeptr ptrs[] = {curr->child[0], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 
@@ -378,9 +377,9 @@ retry:
     // parents left-hand branch will point to it. In the original
     // implementation, this is updated after `synchronize()` but we perform this
     // check here to ensure that range queries follow the correct path.
-    Bundle<node_t<K, V>>* bundles[] = {
-        prev->rqbundle[direction], nnode->rqbundle[0], nnode->rqbundle[1],
-        (prevSucc != curr ? prevSucc->rqbundle[0] : nullptr), nullptr};
+    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {
+        &prev->rqbundle[direction], &nnode->rqbundle[0], &nnode->rqbundle[1],
+        (prevSucc != curr ? &prevSucc->rqbundle[0] : nullptr), nullptr};
     nodeptr ptrs[] = {nnode, curr->child[0],
                       (prevSucc != curr ? curr->child[1] : succ->child[1]),
                       (prevSucc != curr ? succ->child[1] : nullptr), nullptr};
@@ -443,6 +442,16 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     int direction = -1;
     bool range_found = false;
     while (curr != nullptr) {
+#ifndef BUNDLE_OPTIMIZE_RQ
+      if (curr->key >= lo && curr->key <= hi) {
+        range_found = true;
+        break;
+      } else if (curr->key < lo) {
+        curr = curr->rqbundle[1].getPtrByTimestamp(ts);
+      } else {
+        curr = curr->rqbundle[0].getPtrByTimestamp(ts);
+      }
+#else
       if (curr->key >= lo && curr->key <= hi) {
         // Phase 2. Enter the range.
         range_found = true;
@@ -463,6 +472,7 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
         curr = curr->child[0];
         direction = 0;
       }
+#endif
     }
 
     // No keys exist in the range.
@@ -476,22 +486,25 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     } else if (curr != nullptr) {
       // Phase 3. Collect the result set.
       block<node_t<K, V>> stack(nullptr);
-      int cnt = 0;
+      int size = 0;
       stack.push(curr);
       while (!stack.isEmpty()) {
         nodeptr node = stack.pop();
 
         // what (if anything) we need to do with CITRUS' validation function?
-        // answer: nothing, because searches don't need to do anything with it.
+        // answer: nothing, because searches don't need to do anything with
+        // it.
 
         // If the key is in the range, add it to the result set.
-        if (node->key >= lo && node->key <= hi) {
-          cnt += getKeys(tid, node, resultKeys + cnt, resultValues + cnt);
-        }
+        // if (node->key >= lo && node->key <= hi) {
+        //   cnt += getKeys(tid, node, resultKeys + cnt, resultValues + cnt);
+        // }
+        rqProvider->traversal_try_add(tid, node, resultKeys, resultValues,
+                                      &size, lo, hi);
 
         // Explore subtrees with DFS based on timestamp and range.
-        nodeptr left = node->rqbundle[0]->getPtrByTimestamp(ts);
-        nodeptr right = node->rqbundle[1]->getPtrByTimestamp(ts);
+        nodeptr left = node->rqbundle[0].getPtrByTimestamp(ts);
+        nodeptr right = node->rqbundle[1].getPtrByTimestamp(ts);
         if (left != nullptr && lo < node->key) {
           stack.push(left);
         }
@@ -501,7 +514,7 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
       }
       rqProvider->end_traversal(tid);
       recordmgr->enterQuiescentState(tid);
-      return cnt;
+      return size;
     }
   }
 }
@@ -547,23 +560,23 @@ bool bundle_citrustree<K, V, RecManager>::validateBundles(int tid) {
     // Validate the bundles.
     nodeptr ptr;
     timestamp_t ts;
-    ptr = node->rqbundle[0]->first(ts);
+    ptr = node->rqbundle[0].first(ts);
     if (node->child[0] != ptr) {
       std::cout << "Pointer mismatch! [key=" << node->child[0]->key
                 << ",marked=" << node->child[0]->marked << "] "
                 << node->child[0] << " vs. [key=" << ptr->key
                 << ",marked=" << ptr->marked << "] "
-                << node->rqbundle[0]->dump(0) << std::flush;
+                << node->rqbundle[0].dump(0) << std::flush;
       valid = false;
     }
 
-    ptr = node->rqbundle[1]->first(ts);
+    ptr = node->rqbundle[1].first(ts);
     if (node->child[1] != ptr) {
       std::cout << "Pointer mismatch! [key=" << node->child[1]->key
                 << ",marked=" << node->child[1]->marked << "] "
                 << node->child[1] << " vs. [key=" << ptr->key
                 << ",marked=" << ptr->marked << "] "
-                << node->rqbundle[1]->dump(0) << std::flush;
+                << node->rqbundle[1].dump(0) << std::flush;
       valid = false;
     }
 

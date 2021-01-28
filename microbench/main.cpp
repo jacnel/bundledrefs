@@ -313,7 +313,7 @@ void prefill(DS_DECLARATION *ds) {
     if (sz > expectedSize * (1 - PREFILL_THRESHOLD)) {
       break;
     } else {
-      cout << " finished attempt ds seize: " << sz << endl;
+      cout << " finished attempt ds size: " << sz << endl;
     }
 
     totalThreadsPrefillElapsedMillis += glob.prefillIntervalElapsedMillis;

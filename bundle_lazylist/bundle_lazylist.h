@@ -135,7 +135,7 @@ class bundle_lazylist {
         // If this is an unseen node, add bundle entries to stack and update
         // bundle stats.
         int size;
-        std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle->get(size);
+        std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle.get(size);
 #ifdef NO_FREE
         for (int i = 0; i < size; ++i) {
           s.push(entries[i].first);
@@ -158,7 +158,7 @@ class bundle_lazylist {
     ss << "average bundle size           : " << (total / (double)unique.size())
        << endl;
     ss << "max bundle size               : " << max << endl;
-    ss << max_node->rqbundle->dump(0) << endl;
+    ss << max_node->rqbundle.dump(0) << endl;
     return ss.str();
   }
 };

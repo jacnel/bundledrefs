@@ -5,7 +5,7 @@
 #include <sys/types.h>
 #include <atomic>
 #include <mutex>
-#include "common_bundle.h"
+
 #include "plaf.h"
 #include "rq_debugging.h"
 
@@ -50,7 +50,7 @@ class BundleEntry : public BundleEntryBase<NodeType> {
 };
 
 template <typename NodeType>
-class Bundle : public BundleInterface<NodeType> {
+class Bundle : public Bundle<NodeType> {
  private:
   BundleEntry<NodeType> *volatile head_;
   BundleEntry<NodeType> *volatile tail_;

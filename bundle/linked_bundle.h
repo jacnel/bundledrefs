@@ -17,7 +17,10 @@
 #include "rq_debugging.h"
 
 #define CPU_RELAX asm volatile("pause\n" ::: "memory")
+#define likely(x) __builtin_expect((x), 1)
+#define unlikely(x) __builtin_expect((x), 0)
 
+#define DEBUG_PRINT_INIT() unsigned long i = 0
 #define DEBUG_PRINT(str)                         \
   if ((i + 1) % 10000 == 0) {                    \
     std::cout << str << std::endl << std::flush; \
@@ -27,12 +30,15 @@
 enum op { NOP, INSERT, REMOVE };
 
 template <typename NodeType>
-class BundleEntry : public BundleEntryBase<NodeType> {
+class BundleEntry {
  public:
-  volatile timestamp_t ts_;  // Redefinition of ts_ to make it volitile.
+  // volatile timestamp_t ts_;  // Redefinition of ts_ to make it volitile.
+  std::atomic<timestamp_t> ts_;
+  NodeType *ptr_;
 
   // Additional members.
-  BundleEntry *volatile next_;
+  // BundleEntry *volatile next_;
+  std::atomic<BundleEntry *> next_;
   volatile timestamp_t deleted_ts_;
 
   explicit BundleEntry(timestamp_t ts, NodeType *ptr, BundleEntry *next)
@@ -56,10 +62,11 @@ class BundleEntry : public BundleEntryBase<NodeType> {
 };
 
 template <typename NodeType>
-class Bundle : public BundleInterface<NodeType> {
+class LinkedBundle {
  private:
   std::atomic<BundleEntry<NodeType> *> head_;
   BundleEntry<NodeType> *volatile tail_;
+
 #ifdef BUNDLE_DEBUG
   volatile int updates = 0;
   BundleEntry<NodeType> *volatile last_recycled = nullptr;
@@ -67,10 +74,17 @@ class Bundle : public BundleInterface<NodeType> {
 #endif
 
  public:
-  ~Bundle() {
+  // LinkedBundle()
+  //     : tail_(
+  //           new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr)),
+  //       head_(tail_) {}
+  LinkedBundle() = delete;
+
+  ~LinkedBundle() {
     BundleEntry<NodeType> *curr = head_;
     BundleEntry<NodeType> *next;
     while (curr != tail_) {
+      assert(curr != nullptr);
       next = curr->next_;
       delete curr;
       curr = next;
@@ -78,50 +92,53 @@ class Bundle : public BundleInterface<NodeType> {
     delete tail_;
   }
 
-  void init() override {
+  void init() {
+    // static_assert(std::is_default_constructible<LinkedBundle<NodeType>>::value);
     tail_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
     head_ = tail_;
   }
 
   // Inserts a new rq_bundle_node at the head of the bundle.
-  inline void prepare(NodeType *const ptr) override {
+  inline void prepare(NodeType *const ptr) {
     BundleEntry<NodeType> *new_entry =
         new BundleEntry<NodeType>(BUNDLE_PENDING_TIMESTAMP, ptr, nullptr);
-    BundleEntry<NodeType> *expected;
+    BundleEntry<NodeType> *expected = head_;
+    new_entry->next_ = expected;
     while (true) {
-      expected = head_;
-      new_entry->next_ = expected;
-      long i = 0;
-      while (expected->ts_ == BUNDLE_PENDING_TIMESTAMP) {
-        // DEBUG_PRINT("insertAtHead");
-        CPU_RELAX;
-      }
-      if (head_.compare_exchange_weak(expected, new_entry)) {
+      if (likely(expected->ts_.load() != BUNDLE_PENDING_TIMESTAMP &&
+                 head_.compare_exchange_weak(expected, new_entry))) {
 #ifdef BUNDLE_DEBUG
         ++updates;
 #endif
         return;
       }
+      // long i = 0;
+      while (expected->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+        // DEBUG_PRINT("insertAtHead");
+        CPU_RELAX;
+      }
     }
   }
 
   // Labels the pending entry to make it visible to range queries.
-  inline void finalize(timestamp_t ts) override {
-    BundleEntry<NodeType> *entry = head_;
-    assert(entry->ts_ == BUNDLE_PENDING_TIMESTAMP);
-    entry->ts_ = ts;
+  inline void finalize(timestamp_t ts) {
+    // BundleEntry<NodeType> *entry = head_;
+    // assert(entry->ts_ == BUNDLE_PENDING_TIMESTAMP);
+    // entry->ts_ = ts;
+    assert(head_.load()->ts_ == BUNDLE_PENDING_TIMESTAMP);
+    head_.load(memory_order_release)->ts_ = ts;
   }
 
   // Returns a reference to the node that immediately followed at timestamp ts.
-  inline NodeType *getPtrByTimestamp(timestamp_t ts) override {
+  inline NodeType *getPtrByTimestamp(timestamp_t ts) {
     // Start at head and work backwards until edge is found.
     BundleEntry<NodeType> *curr = head_;
     long i = 0;
-    while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+    while (unlikely(curr->ts_ == BUNDLE_PENDING_TIMESTAMP)) {
       // DEBUG_PRINT("getPtrByTimestamp");
       CPU_RELAX;
     }
-    while (curr != tail_ && curr->ts_ > ts) {
+    while (unlikely(curr != tail_ && curr->ts_ > ts)) {
       assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
       curr = curr->next_;
     }
@@ -136,7 +153,7 @@ class Bundle : public BundleInterface<NodeType> {
 
   // Reclaims any edges that are older than ts. At the moment this should be
   // ordered before adding a new entry to the bundle.
-  inline void reclaimEntries(timestamp_t ts) override {
+  inline void reclaimEntries(timestamp_t ts) {
     // Obtain a reference to the pred non-reclaimable entry and first
     // reclaimable one.
     BundleEntry<NodeType> *pred = head_;
@@ -195,7 +212,7 @@ class Bundle : public BundleInterface<NodeType> {
   }
 
   // [UNSAFE] Returns the number of bundle entries.
-  int size() override {
+  int size() {
     int size = 0;
     BundleEntry<NodeType> *curr = head_;
     while (curr != tail_) {
@@ -217,13 +234,13 @@ class Bundle : public BundleInterface<NodeType> {
     return size;
   }
 
-  inline NodeType *first(timestamp_t &ts) override {
+  inline NodeType *first(timestamp_t &ts) {
     BundleEntry<NodeType> *entry = head_;
     ts = entry->ts_;
     return entry->ptr_;
   }
 
-  std::pair<NodeType *, timestamp_t> *get(int &length) override {
+  std::pair<NodeType *, timestamp_t> *get(int &length) {
     // Find the number of entries in the list.
     BundleEntry<NodeType> *curr_entry = head_;
     int size = 0;
@@ -261,7 +278,8 @@ class Bundle : public BundleInterface<NodeType> {
     }
     if (curr == tail_) {
       ss << "(tail)<" << curr->ts_ << "," << curr->ptr_ << ","
-         << (long)curr->next_ << ">";
+         << reinterpret_cast<long>(curr->next_.load(std::memory_order_relaxed))
+         << ">";
     } else {
       ss << "(unexpected end)";
     }
@@ -273,8 +291,6 @@ class Bundle : public BundleInterface<NodeType> {
 #endif
     return ss.str();
   }
-
-  
 };
 
 #endif  // BUNDLE_LINKED_BUNDLE_H

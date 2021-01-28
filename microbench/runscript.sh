@@ -33,7 +33,7 @@ if [ "$#" -eq "1" ]; then
   prefill_and_time="-t ${millis}"
 else
   testingmode=0
-  millis=1000
+  millis=3000
   prefill_and_time="-p -t ${millis}"
 fi
 

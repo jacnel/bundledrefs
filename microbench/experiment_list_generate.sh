@@ -13,14 +13,10 @@ source ./supported.inc
 # ksizes="10000 100000 1000000"
 
 ## Abridged experimental configurations (for artifact evaluation)
-rqtechniques="lockfree rwlock unsafe rlu lbundle"
-datastructures="skiplistlock citrus"
+# rqtechniques="lockfree rwlock unsafe rlu lbundle vcas"
+rqtechniques="lbundle unsafe vcas lockfree"
+datastructures="citrus"
 ksizes="100000"
-
-## All configurations.
-# rqtechniques="lockfree rwlock unsafe rlu lbundle"
-# datastructures="skiplistlock citrus lazylist"
-# ksizes="10000 100000 1000000"
 
 prepare_exp() {
   echo 0 0 0 0 0 0 $1 prepare
@@ -49,7 +45,7 @@ run_workloads() {
               if [ "$?" -ne 0 ]; then continue; fi
               check_ds_size $ds $k
               if [ "$?" -ne 0 ]; then continue; fi
-              if [ "$(( u * 2 + rq ))" -gt 100 ]; then  continue; fi
+              if [ "$((u * 2 + rq))" -gt 100 ]; then continue; fi
               echo $u $rq $rqsize $k $nrq $nwork $ds $alg >>experiment_list.txt
               count=$((${count} + 1))
             done
@@ -95,7 +91,28 @@ run_rq_sizes() {
   echo "Generated ${count} trials."
 }
 
-run_workloads
-run_rq_sizes
+run_rq_threads() {
+  echo "Preparing rq_threads: THROUGHPUT WHILE VARYING THE NUMBER OF THREADS UNDER A FIXED WORKLOAD"
+  rqsizes="8 64 256 1024 8092 16184"
+  urate=50
+  ksize=100000
+  count=0
+  prepare_exp "rq_threads" >>experiment_list.txt
+  for rqsize in $rqsizes; do
+    for ds in $datastructures; do
+      for alg in $rqtechniques; do
+        echo $urate 0 $rqsize $ksize 36 36 $ds $alg >>experiment_list.txt
+        count=$(($count + 1))
+      done
+    done
+  done
+  echo "Generated ${count} trials."
+
+}
+
+#< Indicates the plotting script should detect this line as an experiment to plot
+run_workloads #<
+# run_rq_sizes #<
+run_rq_threads #<
 
 echo "Total experiment lines generated:" $(cat experiment_list.txt | wc -l)

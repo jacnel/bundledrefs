@@ -2,6 +2,7 @@
 .vs*
 figures
 microbench/data*
+!microbench/data_structures.h
 microbench/results
 microbench/graphs
 microbench/*.out

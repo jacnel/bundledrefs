@@ -137,12 +137,22 @@ class RQProvider {
       init_[tid] = !init_[tid];
   }
 
-  inline void physical_deletion_succeeded(const int tid,
-                                          NodeType *const *const deletedNodes) {
-    int i;
-    for (i = 0; deletedNodes[i]; ++i) {
-      recmgr_->retire(tid, deletedNodes[i]);
-    }
+  inline void init_node(int tid, NodeType *const node) {}
+
+  // for each address addr that is modified by rq_linearize_update_at_write
+  // or rq_linearize_update_at_cas, you must replace any initialization of addr
+  // with invocations of rq_write_addr
+  template <typename T>
+  inline void write_addr(const int tid, T volatile *const addr, const T val) {
+    *addr = val;
+  }
+
+  // for each address addr that is modified by rq_linearize_update_at_write
+  // or rq_linearize_update_at_cas, you must replace any reads of addr with
+  // invocations of rq_read_addr
+  template <typename T>
+  inline T read_addr(const int tid, T volatile *const addr) {
+    return *addr;
   }
 
 #define BUNDLE_INIT_CLEANUP(provider) \
@@ -164,7 +174,6 @@ class RQProvider {
     return oldest_active;
   }
 
- private:
 #ifdef BUNDLE_CLEANUP_BACKGROUND
   static void *cleanup_run(void *args) {
     std::cout << "Staring cleanup" << std::endl << std::flush;
@@ -191,6 +200,13 @@ class RQProvider {
       ++rq_thread_data_[tid].data.local_timestamp;
       return curr_timestamp_;
     }
+#elif defined(BUNDLE_UPDATE_USES_CAS)
+    timestamp_t ts = curr_timestamp_;
+    if (curr_timestamp_.compare_exchange_strong(ts, ts + 1)) {
+      return ts + 1;
+    } else {
+      return ts;
+    }
 #else
     return curr_timestamp_.fetch_add(1) + 1;
 #endif
@@ -199,7 +215,6 @@ class RQProvider {
 #endif
   }
 
- public:
   // Write the range query linearization time so updates do not recycle any
   // edges needed by this range query.
   inline timestamp_t start_traversal(int tid) {
@@ -214,6 +229,32 @@ class RQProvider {
 #endif
   }
 
+  // invoke each time a traversal visits a node with a key in the desired range:
+  // if the node belongs in the range query, it will be placed in
+  // rqResult[index]
+  inline void traversal_try_add(const int tid, NodeType *const node,
+                                K *const rqResultKeys, V *const rqResultValues,
+                                int *const startIndex, const K &lo,
+                                const K &hi) {
+    int start = (*startIndex);
+    int keysInNode =
+        ds_->getKeys(tid, node, rqResultKeys + start, rqResultValues + start);
+    assert(keysInNode < RQ_DEBUGGING_MAX_KEYS_PER_NODE);
+    if (keysInNode == 0) return;
+    int location = start;
+    for (int i = start; i < keysInNode + start; ++i) {
+      if (ds_->isInRange(rqResultKeys[i], lo, hi)) {
+        rqResultKeys[location] = rqResultKeys[i];
+        rqResultValues[location] = rqResultValues[i];
+        ++location;
+      }
+    }
+    *startIndex = location;
+#if defined MICROBENCH
+    assert(*startIndex <= RQSIZE);
+#endif
+  }
+
   // Reset the range query linearization time so that updates may recycle an
   // edge we needed.
   inline void end_traversal(int tid) {
@@ -223,13 +264,13 @@ class RQProvider {
   }
 
   // Prepares bundles by calling prepare on each provided bundle-pointer pair.
-  inline void prepare_bundles(Bundle<NodeType> **bundles,
+  inline void prepare_bundles(BUNDLE_TYPE_DECL<NodeType> * bundles[],
                               NodeType *const *const ptrs) {
     // PENDING_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
     int i = 0;
-    Bundle<NodeType> *curr_bundle = bundles[0];
+    BUNDLE_TYPE_DECL<NodeType> *curr_bundle = bundles[0];
     NodeType *curr_ptr = ptrs[0];
     while (curr_bundle != nullptr) {
       curr_bundle->prepare(curr_ptr);
@@ -242,9 +283,10 @@ class RQProvider {
     }
   }
 
-  inline void finalize_bundles(Bundle<NodeType> **bundles, timestamp_t ts) {
+  inline void finalize_bundles(BUNDLE_TYPE_DECL<NodeType> **bundles,
+                               timestamp_t ts) {
     int i = 0;
-    Bundle<NodeType> *curr_bundle = bundles[0];
+    BUNDLE_TYPE_DECL<NodeType> *curr_bundle = bundles[0];
     while (curr_bundle != nullptr) {
       curr_bundle->finalize(ts);
       ++i;
@@ -265,6 +307,63 @@ class RQProvider {
     *lin_addr = lin_newval;  // Original linearization point.
     SOFTWARE_BARRIER;
     return lin_time;
+  }
+
+  // IF DATA STRUCTURE PERFORMS LOGICAL DELETION
+  // run some time BEFORE the physical deletion of a node
+  // whose key has ALREADY been logically deleted.
+  inline void announce_physical_deletion(const int tid,
+                                         NodeType *const *const deletedNodes) {}
+
+  // IF DATA STRUCTURE PERFORMS LOGICAL DELETION
+  // run AFTER performing announce_physical_deletion,
+  // if the cas that was trying to physically delete node failed.
+  inline void physical_deletion_failed(const int tid,
+                                       NodeType *const *const deletedNodes) {}
+
+  // IF DATA STRUCTURE PERFORMS LOGICAL DELETION
+  // run AFTER performing announce_physical_deletion,
+  // if the cas that was trying to physically delete node succeeded.
+  inline void physical_deletion_succeeded(const int tid,
+                                          NodeType *const *const deletedNodes) {
+    int i;
+    for (i = 0; deletedNodes[i]; ++i) {
+      recmgr_->retire(tid, deletedNodes[i]);
+    }
+  }
+
+  // replace the linearization point of an update that inserts or deletes nodes
+  // with an invocation of this function if the linearization point is a CAS
+  template <typename T>
+  inline T linearize_update_at_cas(const int tid, T volatile *const lin_addr,
+                                   const T &lin_oldval, const T &lin_newval,
+                                   NodeType *const *const insertedNodes,
+                                   NodeType *const *const deletedNodes) {
+    if (!logicalDeletion) {
+      // physical deletion will happen at the same time as logical deletion
+      announce_physical_deletion(tid, deletedNodes);
+    }
+
+    T res = __sync_val_compare_and_swap(
+        lin_addr, lin_oldval, lin_newval);  // original linearization point
+
+    if (res == lin_oldval) {
+      if (!logicalDeletion) {
+        // physical deletion will happen at the same time as logical deletion
+        physical_deletion_succeeded(tid, deletedNodes);
+      }
+#if defined USE_RQ_DEBUGGING
+      DEBUG_RECORD_UPDATE_CHECKSUM<K, V>(tid, ts, insertedNodes, deletedNodes,
+                                         ds);
+#endif
+    } else {
+      if (!logicalDeletion) {
+        // physical deletion will happen at the same time as logical deletion
+        physical_deletion_failed(tid, deletedNodes);
+      }
+    }
+
+    return res;
   }
 };
 

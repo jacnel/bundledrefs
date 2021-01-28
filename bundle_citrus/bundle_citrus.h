@@ -33,6 +33,8 @@
 #include <unordered_set>
 #include <utility>
 
+#include "plaf.h"
+
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
 // define BEFORE including rq_provider.h
 #define MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY 4
@@ -46,35 +48,33 @@ using namespace std;
 
 template <typename K, typename V>
 struct node_t {
-  K key;
-  V value;
-  node_t<K, V>* volatile child[2];
-  int tag[2];
-  volatile int lock;
-  bool marked;
+  struct {
+    K key;
+    V value;
+    node_t<K, V>* volatile child[2];
+    int tag[2];
+    volatile int lock;
+    bool marked;
+  };
+  BUNDLE_TYPE_DECL<node_t<K, V>> rqbundle[2];
 
-  Bundle<node_t<K, V>>* rqbundle[2];
-
-  ~node_t() {
-    delete rqbundle[0];
-    delete rqbundle[1];
-  }
+  ~node_t() {}
 
   bool validate() {
     bool valid = true;
     node_t<K, V>* ptr;
     timestamp_t ts;
-    ptr = rqbundle[0]->first(ts);
+    ptr = rqbundle[0].first(ts);
     if (child[0] != ptr) {
       std::cout << "Pointer mismatch! " << child[0] << " vs. "
-                << rqbundle[0]->dump(0) << std::flush;
+                << rqbundle[0].dump(0) << std::flush;
       valid = false;
     }
 
-    ptr = rqbundle[1]->first(ts);
+    ptr = rqbundle[1].first(ts);
     if (child[1] != ptr) {
       std::cout << "Pointer mismatch!  " << child[1] << " vs. "
-                << rqbundle[1]->dump(0) << std::flush;
+                << rqbundle[1].dump(0) << std::flush;
       valid = false;
     }
     return valid;
@@ -214,9 +214,9 @@ class bundle_citrustree {
         int left;
         int right;
         std::pair<nodeptr, timestamp_t>* left_entries =
-            curr->rqbundle[0]->get(left);
+            curr->rqbundle[0].get(left);
         std::pair<nodeptr, timestamp_t>* right_entries =
-            curr->rqbundle[1]->get(right);
+            curr->rqbundle[1].get(right);
 #ifdef NO_FREE
         for (int i = 0; i < left; ++i) {
           if (left_entries[i].first != nullptr) {
@@ -253,8 +253,8 @@ class bundle_citrustree {
         left_total += left;
         right_total += right;
 
-        delete [] left_entries;
-        delete [] right_entries;
+        delete[] left_entries;
+        delete[] right_entries;
       }
     }
 
@@ -267,7 +267,7 @@ class bundle_citrustree {
     ss << "average right bundle size     : "
        << (right_total / (double)unique.size()) << endl;
     ss << "max bundle size               : " << max << endl;
-    ss << max_node->rqbundle[max_direction]->dump(0);
+    ss << max_node->rqbundle[max_direction].dump(0);
     return ss.str();
   }
 

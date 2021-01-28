@@ -16,8 +16,6 @@
 #include "bundle_skiplist.h"
 
 #define CAS __sync_val_compare_and_swap
-#define likely
-#define unlikely
 
 template <typename K, typename V>
 static void sl_node_lock(nodeptr p_node) {
@@ -66,8 +64,7 @@ static int sl_randomLevel(const int tid, Random* const threadRNGs) {
 template <typename K, typename V, class RecordMgr>
 void bundle_skiplist<K, V, RecordMgr>::initNode(const int tid, nodeptr p_node,
                                                 K key, V value, int height) {
-  p_node->rqbundle = new Bundle<node_t<K, V>>();
-  p_node->rqbundle->init();
+  p_node->rqbundle.init();
   p_node->key = key;
   p_node->val = value;
   p_node->topLevel = height;
@@ -318,8 +315,8 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       }
 
       // Bundle preparation must occur before the node is connected.
-      Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle,
-                                         p_new_node->rqbundle, nullptr};
+      BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {
+          &p_preds[0]->rqbundle, &p_new_node->rqbundle, nullptr};
       nodeptr ptrs[] = {p_new_node, p_succs[0], nullptr};
       rqProvider->prepare_bundles(bundles, ptrs);
 
@@ -406,7 +403,8 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
       }
 
       if (valid) {
-        Bundle<node_t<K, V>>* bundles[] = {p_preds[0]->rqbundle, nullptr};
+        BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&p_preds[0]->rqbundle,
+                                                     nullptr};
         nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
         rqProvider->prepare_bundles(bundles, ptrs);
         timestamp_t lin_time = rqProvider->linearize_update_at_write(
@@ -417,6 +415,7 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
         }
         nodeptr deletedNodes[] = {p_victim, nullptr};
         rqProvider->physical_deletion_succeeded(tid, deletedNodes);
+#ifdef BUNDLE_DEBUG
         if (!p_preds[0]->validate()) {
           timestamp_t unused_ts;
           nodeptr bundle_head = p_preds[0]->rqbundle->first(unused_ts);
@@ -428,6 +427,7 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
                     << " " << p_preds[0]->rqbundle->dump(0) << std::flush;
           exit(1);
         }
+#endif
         ret = p_victim->val;
         sl_node_unlock(p_victim);
       } else {
@@ -463,13 +463,13 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   timestamp_t ts;
   long i = 0;
   while (true) {
-    // DEBUG_PRINT("rangeQuery");
     int cnt = 0;
     recmgr->leaveQuiescentState(tid, true);
     ts = rqProvider->start_traversal(tid);
     SOFTWARE_BARRIER;
     nodeptr pred = p_head;
     nodeptr curr = nullptr;
+#ifdef BUNDLE_OPTIMIZE_RQS
     for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];
       while (curr->key < lo) {
@@ -477,13 +477,14 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
         curr = pred->p_next[level];
       }
     }
+#endif
     // Perform the traversal using the bundles.
-    curr = pred->rqbundle->getPtrByTimestamp(ts);
+    curr = pred->rqbundle.getPtrByTimestamp(ts);
     while (curr != nullptr && curr->key <= hi) {
       if (curr->key >= lo) {
         cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
       }
-      curr = curr->rqbundle->getPtrByTimestamp(ts);
+      curr = curr->rqbundle.getPtrByTimestamp(ts);
     }
     rqProvider->end_traversal(tid);
     recmgr->enterQuiescentState(tid);

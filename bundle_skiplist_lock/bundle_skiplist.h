@@ -2,6 +2,7 @@
 #define SKIPLIST_H
 
 #include <stack>
+#include <type_traits>
 #include <unordered_set>
 
 #ifndef MAX_NODES_INSERTED_OR_DELETED_ATOMICALLY
@@ -30,6 +31,7 @@ template <typename K, typename V>
 class node_t {
  public:
   struct {
+   public:
     volatile long lock;
     volatile K key;
     volatile V val;
@@ -44,15 +46,14 @@ class node_t {
                       // used with the lock-free RQProvider (which requires all
                       // fields that are modified at linearization points of
                       // operations to occupy a machine word)
-    node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
-    Bundle<node_t>* volatile rqbundle;
-  };
 
-  ~node_t() { delete rqbundle; }
+    node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
+  };
+  BUNDLE_TYPE_DECL<node_t<K, V>> rqbundle;
 
   bool validate() {
     timestamp_t ts;
-    return p_next[0] == rqbundle->first(ts);
+    return p_next[0] == rqbundle.first(ts);
   }
 
   template <typename RQProvider>
@@ -212,7 +213,7 @@ class bundle_skiplist {
       auto result = unique.insert(curr);
       if (result.second && curr->key != KEY_MAX) {
         int size;
-        std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle->get(size);
+        std::pair<nodeptr, timestamp_t>* entries = curr->rqbundle.get(size);
         // #ifdef NO_FREE
         //         for (int i = 0; i < size; ++i) {
         //           s.push(entries[i].first);
@@ -226,7 +227,7 @@ class bundle_skiplist {
           max_node = curr;
         }
         total += size;
-        delete [] entries;
+        delete[] entries;
       }
       prev = curr;
     }
@@ -237,7 +238,7 @@ class bundle_skiplist {
        << endl;
     ss << "max bundle size               : " << max << endl;
     // ss << "max is marked                 : " << max_node->marked << endl;
-    // ss << max_node->rqbundle->dump(0) << endl;
+    // ss << max_node->rqbundle.dump(0) << endl;
     return ss.str();
   }
 };
