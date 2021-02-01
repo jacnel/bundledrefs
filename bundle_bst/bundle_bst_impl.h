@@ -19,8 +19,9 @@ using namespace std;
 #endif
 
 template <class K, class V, class Compare, class RecManager>
-bundle_bst_ns::Node<K, V> *
-bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::allocateNode(const int tid) {
+bundle_bst_ns::Node<K, V>
+    *bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::allocateNode(
+        const int tid) {
   // this->recmgr->getDebugInfo(NULL)->addToPool(tid, 1);
   Node<K, V> *newnode = recmgr->template allocate<Node<K, V>>(tid);
   if (newnode == NULL) {
@@ -74,8 +75,8 @@ inline int bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::computeSize(
 }
 
 template <class K, class V, class Compare, class RecManager>
-bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::contains(const int tid,
-                                                             const K &key) {
+bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::contains(
+    const int tid, const K &key) {
   pair<V, bool> result = find(tid, key);
   return result.second;
 }
@@ -199,8 +200,8 @@ const pair<V, bool> bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::find(
 }
 
 // template<class K, class V, class Compare, class RecManager>
-// const V bundle_bst_ns::bundle_bst<K,V,Compare,RecManager>::insert(const int tid,
-// const K& key, const V& val) {
+// const V bundle_bst_ns::bundle_bst<K,V,Compare,RecManager>::insert(const int
+// tid, const K& key, const V& val) {
 //    bool onlyIfAbsent = false;
 //    V result = NO_VALUE;
 //    void *input[] = {(void*) &key, (void*) &val, (void*) &onlyIfAbsent};
@@ -246,9 +247,8 @@ const V bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::insertIfAbsent(
 }
 
 template <class K, class V, class Compare, class RecManager>
-const V bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::insert(const int tid,
-                                                              const K &key,
-                                                              const V &val) {
+const V bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::insert(
+    const int tid, const K &key, const V &val) {
   return doInsert(tid, key, val, false);
 }
 
@@ -273,10 +273,9 @@ const pair<V, bool> bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::erase(
 }
 
 template <class K, class V, class Compare, class RecManager>
-inline bool
-bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::updateInsert_search_llx_scx(
-    ReclamationInfo<K, V> *const info, const int tid, void **input,
-    void **output) {
+inline bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::
+    updateInsert_search_llx_scx(ReclamationInfo<K, V> *const info,
+                                const int tid, void **input, void **output) {
   const K &key = *((const K *)input[0]);
   const V &val = *((const V *)input[1]);
   const bool onlyIfAbsent = *((const bool *)input[2]);
@@ -357,21 +356,20 @@ bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::updateInsert_search_llx_sc
     //
     //         [p]                        [p]
     //         / \                       */ \
-    //       [l]  ?           -->      [A1]  ?
+    //       [l]  ()          -->      [A1]  ()
     //                                */ *\
     //                               [l]  [A0]
-    // Bundle<Node<K, V>> *bundles[] = {
-    //     (l == pleft) ? p->left_bundle : p->right_bundle,
-    //     GET_ALLOCATED_NODE_PTR(tid, 1)->left_bundle,
-    //     GET_ALLOCATED_NODE_PTR(tid, 1)->right_bundle, nullptr};
+
     BUNDLE_TYPE_DECL<Node<K, V>> *bundles[] = {
-        (l == pleft) ? &p->left_bundle : &p->right_bundle,
         &GET_ALLOCATED_NODE_PTR(tid, 1)->left_bundle,
-        &GET_ALLOCATED_NODE_PTR(tid, 1)->right_bundle, nullptr};
-    Node<K, V> *ptrs[] = {GET_ALLOCATED_NODE_PTR(tid, 1),
-                          (l == pleft) ? GET_ALLOCATED_NODE_PTR(tid, 0) : l,
-                          (l == pleft) ? l : GET_ALLOCATED_NODE_PTR(tid, 0),
-                          nullptr};
+        &GET_ALLOCATED_NODE_PTR(tid, 1)->right_bundle,
+        (l == pleft) ? &p->left_bundle : &p->right_bundle, nullptr};
+    Node<K, V> *ptrs[] = {
+        (l->key == NO_KEY || cmp(key, l->key)) ? GET_ALLOCATED_NODE_PTR(tid, 0)
+                                               : l,
+        (l->key == NO_KEY || cmp(key, l->key)) ? l
+                                               : GET_ALLOCATED_NODE_PTR(tid, 0),
+        GET_ALLOCATED_NODE_PTR(tid, 1), nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
     timestamp_t ts = rqProvider->get_update_lin_time(tid);
 
@@ -385,10 +383,10 @@ bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::updateInsert_search_llx_sc
 }
 
 template <class K, class V, class Compare, class RecManager>
-inline bool
-bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::updateErase_search_llx_scx(
-    ReclamationInfo<K, V> *const info, const int tid, void **input,
-    void **output) {  // input consists of: const K& key
+inline bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::
+    updateErase_search_llx_scx(
+        ReclamationInfo<K, V> *const info, const int tid, void **input,
+        void **output) {  // input consists of: const K& key
   const K &key = *((const K *)input[0]);
   V *result = (V *)output[0];
 
@@ -455,11 +453,12 @@ bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::updateErase_search_llx_scx
     // Prepare the bundles
     //
     // The parent of s is the only node that must be updated.
-    // Bundle<Node<K, V>> *bundles[] = {
-    //     p == gpleft ? gp->left_bundle : gp->right_bundle, nullptr};
+
     BUNDLE_TYPE_DECL<Node<K, V>> *bundles[] = {
+        &GET_ALLOCATED_NODE_PTR(tid, 0)->left_bundle,
+        &GET_ALLOCATED_NODE_PTR(tid, 0)->right_bundle,
         p == gpleft ? &gp->left_bundle : &gp->right_bundle, nullptr};
-    Node<K, V> *ptrs[] = {GET_ALLOCATED_NODE_PTR(tid, 0), NULL};
+    Node<K, V> *ptrs[] = {sleft, sright, GET_ALLOCATED_NODE_PTR(tid, 0), NULL};
     rqProvider->prepare_bundles(bundles, ptrs);
     timestamp_t ts = rqProvider->get_update_lin_time(tid);
 
@@ -488,7 +487,7 @@ bundle_bst_ns::Node<K, V>
   rqProvider->write_addr(tid, &newnode->right, right);
   newnode->scxRecord.store((uintptr_t)DUMMY_SCXRECORD, memory_order_relaxed);
   newnode->marked.store(false, memory_order_relaxed);
-  
+
   // newnode->left_bundle = Bundle<Node<K,V>>();
   newnode->left_bundle.init();
   // if (left != nullptr) newnode->left_bundle->prepare(left);
@@ -504,8 +503,8 @@ bundle_bst_ns::Node<K, V>
 // being called from crash recovery, all nodes in nodes[] and the scx record
 // must be Qprotected.
 template <class K, class V, class Compare, class RecManager>
-void bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::reclaimMemoryAfterSCX(
-    const int tid, ReclamationInfo<K, V> *info) {
+void bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::
+    reclaimMemoryAfterSCX(const int tid, ReclamationInfo<K, V> *info) {
   Node<K, V> **const nodes = info->nodes;
   SCXRecord<K, V> *const *const scxRecordsSeen =
       (SCXRecord<K, V> *const *const)info->llxResults;
@@ -592,8 +591,8 @@ bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::scx(
 }
 
 template <class K, class V, class Compare, class RecManager>
-void bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::helpOther(const int tid,
-                                                              tagptr_t tagptr) {
+void bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::helpOther(
+    const int tid, tagptr_t tagptr) {
   if ((void *)tagptr == DUMMY_SCXRECORD) {
     TRACE COUTATOMICTID("helpOther dummy descriptor" << endl);
     return;  // deal with the dummy descriptor
@@ -613,10 +612,8 @@ void bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::helpOther(const int t
 
 // returns the state field of the scx record "scx."
 template <class K, class V, class Compare, class RecManager>
-int bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::help(const int tid,
-                                                        tagptr_t tagptr,
-                                                        SCXRecord<K, V> *snap,
-                                                        bool helpingOther) {
+int bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::help(
+    const int tid, tagptr_t tagptr, SCXRecord<K, V> *snap, bool helpingOther) {
   TRACE COUTATOMICTID("help " << tagptrToString(tagptr) << endl);
   SCXRecord<K, V> *ptr = TAGPTR1_UNPACK_PTR(tagptr);
 
