@@ -45,15 +45,14 @@ class Node {
   volatile long long dtime;  // for use by range query algorithm
   RECLAIM_RCU_RCUHEAD_DEFN;
 
-  // Bundle<Node<K, V>>* left_bundle = nullptr;
-  // Bundle<Node<K, V>>* right_bundle = nullptr;
-
   BUNDLE_TYPE_DECL<Node<K, V>> left_bundle;
   BUNDLE_TYPE_DECL<Node<K, V>> right_bundle;
 
-  // Node() { asm(""); }
-  // Node(const Node& node) {}
-  // ~Node() {}
+  void validate() {
+    timestamp_t ts;
+    assert(left == left_bundle.first(ts));
+    assert(right == right_bundle.first(ts));
+  }
 
   friend ostream& operator<<(ostream& os, const Node<K, V>& obj) {}
   void printTreeFile(ostream& os) {}

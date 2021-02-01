@@ -133,12 +133,10 @@ int bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::rangeQuery(
       Node<K, V> *node = stack.pop();
       assert(node);
 
-      // Node<K, V> *left = node->left_bundle->getPtrByTimestamp(ts);
       Node<K, V> *left = node->left_bundle.getPtrByTimestamp(ts);
       // if internal node, explore its children
       if (left != NULL) {
         if (node->key != this->NO_KEY && !cmp(hi, node->key)) {
-          // Node<K, V> *right = node->right_bundle->getPtrByTimestamp(ts);
           Node<K, V> *right = node->right_bundle.getPtrByTimestamp(ts);
           assert(right);
           stack.push(right);
@@ -147,7 +145,6 @@ int bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::rangeQuery(
           assert(left);
           stack.push(left);
         }
-
         // else if leaf node, check if we should add its key to the traversal
       } else {
         rqProvider->traversal_try_add(tid, node, resultKeys, resultValues,
@@ -378,6 +375,11 @@ inline bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::
             GET_ALLOCATED_NODE_PTR(tid, 1), insertedNodes, deletedNodes);
 
     rqProvider->finalize_bundles(bundles, ts);
+
+#ifndef NDEBUG
+    l->validate();
+#endif
+
     return retval;
   }
 }
@@ -450,9 +452,20 @@ inline bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::
     assert(s);
     assert(l);
 
-    // Prepare the bundles
+    // Prepare the bundles.
     //
-    // The parent of s is the only node that must be updated.
+    // The first bundles to replace are the newly allocated node that replaces
+    // the parent of the leaf being removed. Since the parent is just a routing
+    // node, we replace it with the sibling. It's also necessary to preapre the
+    // grandparent, whose child is CAS'ed to finalize the SCX operation.
+    //
+    //      [gp]                    [gp]
+    //        \                       \                        
+    //        [p]       ==>           [s']
+    //        / \                     / \                      
+    //      [s] [l]                 ()   ()
+    //      / \                                              
+    //     () ()
 
     BUNDLE_TYPE_DECL<Node<K, V>> *bundles[] = {
         &GET_ALLOCATED_NODE_PTR(tid, 0)->left_bundle,
@@ -467,6 +480,7 @@ inline bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::
     bool retval =
         scx(tid, info, (p == gpleft ? &gp->left : &gp->right),
             GET_ALLOCATED_NODE_PTR(tid, 0), insertedNodes, deletedNodes);
+
     rqProvider->finalize_bundles(bundles, ts);
     return retval;
   }
@@ -488,12 +502,8 @@ bundle_bst_ns::Node<K, V>
   newnode->scxRecord.store((uintptr_t)DUMMY_SCXRECORD, memory_order_relaxed);
   newnode->marked.store(false, memory_order_relaxed);
 
-  // newnode->left_bundle = Bundle<Node<K,V>>();
   newnode->left_bundle.init();
-  // if (left != nullptr) newnode->left_bundle->prepare(left);
-  // newnode->right_bundle = Bundle<Node<K,V>>();
   newnode->right_bundle.init();
-  // if (right != nullptr) newnode->left_bundle->prepare(right);
   return newnode;
 }
 
