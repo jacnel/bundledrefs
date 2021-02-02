@@ -74,12 +74,6 @@ class LinkedBundle {
 #endif
 
  public:
-  // LinkedBundle()
-  //     : tail_(
-  //           new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr)),
-  //       head_(tail_) {}
-  LinkedBundle() = delete;
-
   ~LinkedBundle() {
     BundleEntry<NodeType> *curr = head_;
     BundleEntry<NodeType> *next;
@@ -93,7 +87,6 @@ class LinkedBundle {
   }
 
   void init() {
-    // static_assert(std::is_default_constructible<LinkedBundle<NodeType>>::value);
     tail_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
     head_ = tail_;
   }
@@ -122,9 +115,6 @@ class LinkedBundle {
 
   // Labels the pending entry to make it visible to range queries.
   inline void finalize(timestamp_t ts) {
-    // BundleEntry<NodeType> *entry = head_;
-    // assert(entry->ts_ == BUNDLE_PENDING_TIMESTAMP);
-    // entry->ts_ = ts;
     assert(head_.load()->ts_ == BUNDLE_PENDING_TIMESTAMP);
     head_.load(memory_order_release)->ts_ = ts;
   }

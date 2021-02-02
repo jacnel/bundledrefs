@@ -14,8 +14,8 @@ source ./supported.inc
 
 ## Abridged experimental configurations (for artifact evaluation)
 # rqtechniques="lockfree rwlock unsafe rlu lbundle vcas"
-rqtechniques="lbundle unsafe vcas lockfree"
-datastructures="citrus"
+rqtechniques="lbundle unsafe rlu lockfree rwlock"
+datastructures="skiplistlock"
 ksizes="100000"
 
 prepare_exp() {
@@ -101,6 +101,10 @@ run_rq_threads() {
   for rqsize in $rqsizes; do
     for ds in $datastructures; do
       for alg in $rqtechniques; do
+        check_ds_technique $ds $alg
+        if [ "$?" -ne 0 ]; then continue; fi
+        check_ds_size $ds $k
+        if [ "$?" -ne 0 ]; then continue; fi
         echo $urate 0 $rqsize $ksize 36 36 $ds $alg >>experiment_list.txt
         count=$(($count + 1))
       done

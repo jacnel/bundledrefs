@@ -460,10 +460,10 @@ inline bool bundle_bst_ns::bundle_bst<K, V, Compare, RecManager>::
     // grandparent, whose child is CAS'ed to finalize the SCX operation.
     //
     //      [gp]                    [gp]
-    //        \                       \                        
+    //        \                       *\                        
     //        [p]       ==>           [s']
-    //        / \                     / \                      
-    //      [s] [l]                 ()   ()
+    //        / \                    */ *\                      
+    //      [s] [l]                  ()  ()
     //      / \                                              
     //     () ()
 
