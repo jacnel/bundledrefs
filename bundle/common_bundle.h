@@ -7,9 +7,9 @@
 #define BUNDLE_COMMON_BUNDLE_H
 
 typedef long long timestamp_t;
-#define BUNDLE_PENDING_TIMESTAMP -1
-#define BUNDLE_NULL_TIMESTAMP 0
-#define BUNDLE_MIN_TIMESTAMP 1
+#define BUNDLE_PENDING_TIMESTAMP 1LL
+#define BUNDLE_NULL_TIMESTAMP 0LL
+#define BUNDLE_MIN_TIMESTAMP 2LL
 #define BUNDLE_MAX_TIMESTAMP LLONG_MAX
 
 template <typename NodeType>

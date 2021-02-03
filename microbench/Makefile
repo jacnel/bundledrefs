@@ -6,7 +6,7 @@ FLAGS = -std=c++11 -mcx16
 FLAGS += -O3
 # FLAGS += -O0 -fsanitize=address -static-libasan -fsanitize=leak
 FLAGS += -g
-# FLAGS += -DNDEBUG
+FLAGS += -DNDEBUG
 FLAGS += $(PLAF)
 FLAGS += -DUSE_GSTATS
 #FLAGS += -DNO_FREE

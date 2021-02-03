@@ -221,12 +221,13 @@ retry:
   acquireLock(&(prev->lock));
   if (validate(tid, prev, tag, curr, direction)) {
     nodeptr nnode = newNode(tid, key, value);
+    acquireLock(&(nnode->lock));
 
     // Prepare the bundles.
-    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction],
-                                       &nnode->rqbundle[0], &nnode->rqbundle[1],
-                                       nullptr};
-    nodeptr ptrs[] = {nnode, nullptr, nullptr, nullptr};
+    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {
+        &nnode->rqbundle[0], &nnode->rqbundle[1], &prev->rqbundle[direction],
+        nullptr};
+    nodeptr ptrs[] = {nullptr, nullptr, nnode, nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 
     // Perform linearization.
@@ -236,6 +237,7 @@ retry:
     // Finalize the bundles.
     rqProvider->finalize_bundles(bundles, lin_time);
 
+    releaseLock(&(nnode->lock));
     releaseLock(&(prev->lock));
     recordmgr->enterQuiescentState(tid);
     return NO_VALUE;
@@ -295,7 +297,8 @@ retry:
     curr->marked = true;
 
     // Prepare bundles.
-    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction], nullptr};
+    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction],
+                                                 nullptr};
     nodeptr ptrs[] = {curr->child[1], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 
@@ -324,7 +327,8 @@ retry:
     curr->marked = true;
 
     // Prepare bundles.
-    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction], nullptr};
+    BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction],
+                                                 nullptr};
     nodeptr ptrs[] = {curr->child[0], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 

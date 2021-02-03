@@ -32,16 +32,14 @@ enum op { NOP, INSERT, REMOVE };
 template <typename NodeType>
 class BundleEntry {
  public:
-  // volatile timestamp_t ts_;  // Redefinition of ts_ to make it volitile.
   std::atomic<timestamp_t> ts_;
   NodeType *ptr_;
-
-  // Additional members.
-  // BundleEntry *volatile next_;
   std::atomic<BundleEntry *> next_;
   volatile timestamp_t deleted_ts_;
 
-  explicit BundleEntry(timestamp_t ts, NodeType *ptr, BundleEntry *next)
+  BundleEntry() = delete;
+
+  BundleEntry(timestamp_t ts, NodeType *ptr, BundleEntry *next)
       : ts_(ts), next_(next) {
     this->ptr_ = ptr;
     deleted_ts_ = BUNDLE_NULL_TIMESTAMP;
@@ -95,11 +93,13 @@ class LinkedBundle {
   inline void prepare(NodeType *const ptr) {
     BundleEntry<NodeType> *new_entry =
         new BundleEntry<NodeType>(BUNDLE_PENDING_TIMESTAMP, ptr, nullptr);
-    BundleEntry<NodeType> *expected = head_;
-    new_entry->next_ = expected;
+
+#ifdef BUNDLE_LOCKFREE
     while (true) {
-      if (likely(expected->ts_.load() != BUNDLE_PENDING_TIMESTAMP &&
-                 head_.compare_exchange_weak(expected, new_entry))) {
+      BundleEntry<NodeType> *expected = head_;
+      if (expected->ts_ != BUNDLE_PENDING_TIMESTAMP &&
+          head_.compare_exchange_weak(expected, new_entry)) {
+        new_entry->next_ = expected;
 #ifdef BUNDLE_DEBUG
         ++updates;
 #endif
@@ -111,12 +111,23 @@ class LinkedBundle {
         CPU_RELAX;
       }
     }
+#else
+    // Since we have a lock on this node presently, we are able to use a less
+    // stringent memory order
+    new_entry->next_.store(head_, std::memory_order_relaxed);
+    head_ = new_entry;
+#ifdef BUNDLE_DEBUG
+    ++updates;
+#endif
+    return;
+#endif
   }
 
   // Labels the pending entry to make it visible to range queries.
   inline void finalize(timestamp_t ts) {
+    assert(ts != BUNDLE_PENDING_TIMESTAMP);
     assert(head_.load()->ts_ == BUNDLE_PENDING_TIMESTAMP);
-    head_.load(memory_order_release)->ts_ = ts;
+    head_.load()->ts_ = ts;
   }
 
   // Returns a reference to the node that immediately followed at timestamp ts.

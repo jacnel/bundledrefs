@@ -9,6 +9,7 @@
 FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 # ---------------------------
 
+
 ## Bundle entry cleanup flags. Uncoment CLEANUP_BACKGROUND to 
 ## enable a background thread cleanup of bundle entries. The 
 ## CLEANUP_SLEEP macro adjusts how many nanoseconds the background 
@@ -22,7 +23,8 @@ FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 # FLAGS += -DBUNDLE_CLEANUP_SLEEP=100000  # ns
 # --------------------------
 
-FLAGS += -DBUNDLE_UPDATE_USES_CAS
+# FLAGS += -DBUNDLE_UPDATE_USES_CAS
+# FLAGS += -DBUNDLE_RQTS
 
 ## Three-phase range query optimzation. Allows range queries to use 
 ## the regular pointers for the first (pre-traversal) phase. During 

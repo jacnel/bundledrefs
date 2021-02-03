@@ -309,6 +309,7 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
                     ((long long)p_new_node) % (1 << 12));
 #endif
       initNode(tid, p_new_node, key, value, topLevel);
+      sl_node_lock(p_new_node);
       p_new_node->topLevel = topLevel;
       for (level = 0; level <= topLevel; level++) {
         p_new_node->p_next[level] = p_succs[level];
@@ -332,6 +333,7 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
 #endif
       // p_new_node->fullyLinked = 1;
       done = 1;
+      sl_node_unlock(p_new_node);
     }
 
     // unlock everything here
@@ -418,13 +420,13 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
 #ifdef BUNDLE_DEBUG
         if (!p_preds[0]->validate()) {
           timestamp_t unused_ts;
-          nodeptr bundle_head = p_preds[0]->rqbundle->first(unused_ts);
+          nodeptr bundle_head = p_preds[0]->rqbundle.first(unused_ts);
           std::cout << "[DELETE " << p_victim
                     << "] Pointer mismatch! [key=" << p_preds[0]->p_next[0]->key
                     << ",marked=" << p_preds[0]->p_next[0]->marked << "] "
                     << p_preds[0]->p_next[0] << " vs. [key=" << bundle_head->key
                     << ",marked=" << bundle_head->marked << "] " << bundle_head
-                    << " " << p_preds[0]->rqbundle->dump(0) << std::flush;
+                    << " " << p_preds[0]->rqbundle.dump(0) << std::flush;
           exit(1);
         }
 #endif

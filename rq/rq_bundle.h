@@ -190,6 +190,10 @@ class RQProvider {
   // Atomically increments the global timestamp and returns the new value to the
   // caller.
   inline timestamp_t get_update_lin_time(int tid) {
+#ifdef BUNDLE_RQ_TS
+    return curr_timestamp_;
+#endif
+
 #ifndef BUNDLE_UNSAFE_BUNDLE
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
     if (((rq_thread_data_[tid].data.local_timestamp + 1) %
@@ -210,15 +214,26 @@ class RQProvider {
 #else
     return curr_timestamp_.fetch_add(1) + 1;
 #endif
+    // return curr_timestamp_;
 #else
     return BUNDLE_MIN_TIMESTAMP;
+#endif
 #endif
   }
 
   // Write the range query linearization time so updates do not recycle any
   // edges needed by this range query.
   inline timestamp_t start_traversal(int tid) {
-// Atomic loads on rq_flag have acquire semantics.
+#ifdef BUNDLE_RQTS
+#if defined(BUNDLE_UPDATE_USES_CAS)
+    timestamp_t ts = curr_timestamp_;
+    curr_timestamp_.compare_exchange_strong(ts, ts + 1);
+    return ts;
+#else
+    return curr_timestamp_.fetch_add(1);
+#endif
+#endif
+
 #ifndef BUNDLE_UNSAFE_BUNDLE
     rq_thread_data_[tid].data.rq_flag = true;
     rq_thread_data_[tid].data.rq_lin_time = curr_timestamp_;
@@ -264,11 +279,12 @@ class RQProvider {
   }
 
   // Prepares bundles by calling prepare on each provided bundle-pointer pair.
-  inline void prepare_bundles(BUNDLE_TYPE_DECL<NodeType> * bundles[],
+  inline void prepare_bundles(BUNDLE_TYPE_DECL<NodeType> *bundles[],
                               NodeType *const *const ptrs) {
     // PENDING_TIMESTAMP blocks all RQs that might see the update, ensuring that
     // the update is visible (i.e., get and RQ have the same linearization
     // point).
+    SOFTWARE_BARRIER;
     int i = 0;
     BUNDLE_TYPE_DECL<NodeType> *curr_bundle = bundles[0];
     NodeType *curr_ptr = ptrs[0];
@@ -292,6 +308,7 @@ class RQProvider {
       ++i;
       curr_bundle = bundles[i];
     }
+    SOFTWARE_BARRIER;
   }
 
   // Find and update the newest reference in the predecesor's bundle. If this
@@ -366,5 +383,3 @@ class RQProvider {
     return res;
   }
 };
-
-#endif
