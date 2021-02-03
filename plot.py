@@ -3,7 +3,8 @@ import plotly
 import plotly.graph_objects as go
 from plotly import subplots
 from plot_util import *
-from plot_config import *
+
+# from plot_config import *
 import argparse
 from plotly.subplots import make_subplots
 import math
@@ -12,10 +13,24 @@ from absl import flags
 
 FLAGS = flags.FLAGS
 
+# General configuration flags
 flags.DEFINE_bool("microbench", False, "Plot microbenchmark results")
+flags.DEFINE_string(
+    "microbench_dir",
+    "./microbench/data",
+    "Location of microbenchmark data. If the folder corresponding to each experiment does not contain a .csv file, it will be automatically generated",
+)
 flags.DEFINE_bool("macrobench", False, "Plot macrobenchmark results")
+flags.DEFINE_string(
+    "macrobench_dir",
+    "./macrobench/data",
+    "Location of macrobenchmark data. If the folder corresponding to each experiment does not contain a .csv file, it will be automatically generated",
+)
 flags.DEFINE_bool("save_plots", False, "Save plots as interactive HTML files")
-flags.DEFINE_string("save_path", "./figures", "Directory where to save plots")
+flags.DEFINE_string("save_dir", "./figures", "Directory where to save plots")
+flags.DEFINE_bool("print_speedup", False, "Print the speedup over unsafe")
+
+# Flags related to automatic detection of configuration
 flags.DEFINE_bool(
     "autodetect",
     True,
@@ -36,6 +51,25 @@ flags.DEFINE_bool(
     False,
     "Automatically pull number of trials information from runscript.sh",
 )
+
+flags.DEFINE_integer(
+    "workloads_rqrate",
+    10,
+    "Rate of range query operations to use when plotting the 'workloads' experiment",
+)
+flags.DEFINE_list(
+    "workloads_urates",
+    [0, 2, 10, 50, 90, 100],
+    "Rate of range query operations to use when plotting the 'workloads' experiment",
+)
+flags.DEFINE_integer(
+    "rqsizes_maxkey", 100000, "Maximum key used when running the 'rqsizes' experiment"
+)
+flags.DEFINE_integer(
+    "rqthreads_numrqthreads",
+    36,
+    "Number of dedicated RQ threads used in the 'rqthreads' experiment",
+)
 flags.DEFINE_list("experiments", None, "List of experiments to plot")
 flags.DEFINE_list("datastructures", None, "List of data structures to plot")
 flags.DEFINE_list("max_keys", None, "List of max keys to use while plotting")
@@ -43,7 +77,8 @@ flags.DEFINE_list("nthreads", None, "List of thread counts to plot")
 flags.DEFINE_integer(
     "ntrials", 3, "Number of trials per experiment (used for averaging results)"
 )
-flags.DEFINE_bool("print_speedup", False, "Print the speedup over unsafe")
+
+flags.re
 
 
 def plot_workload(
@@ -156,7 +191,9 @@ def plot_workload(
     if FLAGS.print_speedup:
         ignore = ["ubundle"]
         overalgo = "unsafe"
-        overalgos = [k for k in plotconfig.keys() if (k not in ignore and k != overalgo)]
+        overalgos = [
+            k for k in plotconfig.keys() if (k not in ignore and k != overalgo)
+        ]
         print('Speedup over "unsafe" for ' + ds + " @ " + str(u_rate) + "% updates\n")
         threads_printed = False
         for o in overalgos:
@@ -183,12 +220,22 @@ def plot_workload(
             print("\n{:15}|".format(""))
             print("{:<15}{}".format(o, "|"), end="")
             for i in range(0, len(data[o]["x"])):
-                print("{:>10.3}".format(data[o]["y"][i] / data[overalgo]["y"][i]), end="")
+                print(
+                    "{:>10.3}".format(data[o]["y"][i] / data[overalgo]["y"][i]), end=""
+                )
         print("\n\n")
 
 
 def plot_rq_sizes(
-    dirpath, dss, max_key, nthreads, ntrials, ylabel=False, legend=False, save=False, save_dir=""
+    dirpath,
+    dss,
+    max_key,
+    nthreads,
+    ntrials,
+    ylabel=False,
+    legend=False,
+    save=False,
+    save_dir="",
 ):
     # Experiment 1 demonstrates performance as the workload distribution changes.
 
@@ -386,7 +433,8 @@ def plot_rq_sizes(
         fig.show()
     else:
         filename = "rqsize_maxkey" + str(max_key) + ".html"
-        fig.write_html(os.path.join(save_dir, filename))
+        subdir = os.path.join(save_dir, "rqsizes")
+        fig.write_html(os.path.join(subdir, filename))
 
 
 def plot_rq_threads(
@@ -413,7 +461,7 @@ def plot_rq_threads(
                 x_axis,
                 y_axis,
                 ["list", "max_key", "rq_threads"],
-                [ds + "-" + a, max_key, n_rq_threads],
+                [ds + "-" + a, max_key, FLAGS.rqthreads_numrqthreads],
             )
             count += len(data[y_axis][a]["x"])
             data[y_axis][a]["y"] = (
@@ -480,7 +528,13 @@ def plot_rq_threads(
     else:
         save_dir = os.path.join(save_dir, "rq_threads/" + ds)
         os.makedirs(save_dir, exist_ok=True)
-        filename = "nrqthreads" + str(n_rq_threads) + "_maxkey" + str(max_key) + ".html"
+        filename = (
+            "nrqthreads"
+            + str(FLAGS.rqthreads_numrqthreads)
+            + "_maxkey"
+            + str(max_key)
+            + ".html"
+        )
         fig.write_html(os.path.join(save_dir, filename))
 
 
@@ -594,7 +648,7 @@ def get_threads_config():
             nthreads.append(i)
         nthreads.append(threads_config["maxthreads"])
     else:
-        assert(FLAGS.nthreads is not None)
+        assert FLAGS.nthreads is not None
         for n in FLAGS.nthreads:
             nthreads += int(n)
     return nthreads
@@ -611,7 +665,7 @@ def get_microbench_configs():
         experiments = FLAGS.experiments
         experiment_configs = {}
         experiment_configs["datastructures"] = FLAGS.datastructures
-        experiment_configs["ksizes"] = [int(max_key) for max_key in   FLAGS.max_keys]
+        experiment_configs["ksizes"] = [int(max_key) for max_key in FLAGS.max_keys]
         return experiments, experiment_configs
 
 
@@ -624,15 +678,14 @@ def main(argv):
 
     # Plot microbench results.
     if FLAGS.microbench:
-        # Get configuration automatically
+        assert FLAGS.microbench_dir is not None
+        FLAGS.workloads_urates = [int(u) for u in FLAGS.workloads_urates]
+
         nthreads = get_threads_config()
         print("Thread configuration: " + str(nthreads))
         experiments, microbench_configs = get_microbench_configs()
         print("Experiments to plot: " + str(experiments))
-        print(
-            'Data structures and key ranges: '
-            + str(microbench_configs)
-        )
+        print("Data structures and key ranges: " + str(microbench_configs))
 
         if FLAGS.detect_trials:
             runscript_config = parse_runscript("./microbench/runscript.sh", ["trials"])
@@ -642,68 +695,72 @@ def main(argv):
         print("Number of trials: " + str(ntrials))
 
         # Plot peformance at different workload configurations (corresponds to Figure 2)
-        save_dir = "./figures/microbench"
         for ds in microbench_configs["datastructures"]:
             for k in microbench_configs["ksizes"]:
                 if "run_workloads" in experiments:
-                    for u in workloads_urates:
+                    for u in FLAGS.workloads_urates:
                         print("Plotting workloads")
                         plot_workload(
-                            microbench_dir,
+                            FLAGS.microbench_dir,
                             ds,
                             k,
                             u,
-                            (workloads_rqrate if u != 100 else 0),
+                            (FLAGS.workloads_rqrate if u != 100 else 0),
                             ntrials,
                             True,
                             True,
                             FLAGS.save_plots,
-                            save_dir,
+                            os.path.join(FLAGS.save_dir, "microbench"),
                         )
                         pass
 
                 if "run_rq_threads" in experiments:
                     print("Plotting rq_threads")
                     plot_rq_threads(
-                        microbench_dir, ds, k, ntrials, True, True, FLAGS.save_plots, save_dir
+                        FLAGS.microbench_dir,
+                        ds,
+                        k,
+                        ntrials,
+                        True,
+                        True,
+                        FLAGS.save_plots,
+                        os.path.join(FLAGS.save_dir, "microbench"),
                     )
 
         # Plot performance w.r.t. range query size experiments at 50% updates and 50% range queries (corresponds to Figure 3)
         if "run_rq_sizes" in experiments:
-            save_dir = "./figures/microbench/rq_size"
-            os.makedirs(save_dir, exist_ok=True)
-            if rqsize_max_key not in microbench_configs["ksizes"]:
+            if FLAGS.rqsize_maxkey not in microbench_configs["ksizes"]:
                 print(
                     'Could not match key range to configuration derived from "./microbench/experiment_list_generate.sh"'
                 )
             plot_rq_sizes(
-                microbench_dir,
+                FLAGS.microbench_dir,
                 microbench_configs["datastructures"],
-                rqsize_max_key,
+                FLAGS.rqsize_maxkey,
                 nthreads,
                 ntrials,
                 True,
                 True,
                 FLAGS.save_plots,
-                save_dir,
+                os.path.join(FLAGS.save_dir, "microbench"),
             )
 
     # Plot macrobench results (corresponds to Figure 4)
     if FLAGS.macrobench:
-        save_dir = "./figures/macrobench/skiplistlock"
+        save_dir = os.path.join(FLAGS.save_dir, "macrobench/skiplistlock")
         os.makedirs(save_dir, exist_ok=True)
         plot_macrobench(
-            os.path.join(macrobench_dir, "rq_tpcc"),
+            os.path.join(FLAGS.macrobench_dir, "rq_tpcc"),
             "SKIPLISTLOCK",
             ylabel=True,
             legend=True,
             save=FLAGS.save_plots,
             save_dir=save_dir,
         )
-        save_dir = "./figures/macrobench/citrus"
+        save_dir = os.path.join(FLAGS.save_dir, "macrobench/citrus")
         os.makedirs(save_dir, exist_ok=True)
         plot_macrobench(
-            os.path.join(macrobench_dir, "rq_tpcc"),
+            os.path.join(FLAGS.macrobench_dir, "rq_tpcc"),
             "CITRUS",
             ylabel=True,
             legend=True,

@@ -6,7 +6,7 @@ microbench_dir = './microbench/data'
 ### "workloads" experiment configuration ###
 
 ## Must correspond to one of the rqrates in run_workloads() in ./microbench/experiment_list_generate.sh
-workloads_rqrate = 10
+workloads_rqrate = 50
 ## Only change if you know what you are doing. Must correspong to urates in run_workloads() in ./microbench/experiment_list_generate.sh
 workloads_urates = [0, 2, 10, 50, 90, 100]
 
