@@ -133,19 +133,26 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
   const int dummyTid = 0;
   recmgr->initThread(dummyTid);
 
+  rqProvider =
+      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
+                     RecManager, true, false>(numProcesses, this, recmgr);
+
   p_tail = allocateNode(dummyTid);
   initNode(dummyTid, p_tail, KEY_MAX, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
 
   p_head = allocateNode(dummyTid);
   initNode(dummyTid, p_head, KEY_MIN, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
 
+  BUNDLE_TYPE_DECL<node_t<K,V>> * bundles[] = {&p_head->rqbundle, nullptr};
+  nodeptr ptrs[] = {p_tail, nullptr};
+  rqProvider->prepare_bundles(bundles, ptrs);
+  timestamp_t ts = rqProvider->get_update_lin_time(dummyTid);
+
   for (i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
     p_head->p_next[i] = p_tail;
   }
 
-  rqProvider =
-      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
-                     RecManager, true, false>(numProcesses, this, recmgr);
+  rqProvider->finalize_bundles(bundles, ts);
 }
 
 template <typename K, typename V, class RecManager>
@@ -463,6 +470,7 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   V* const resultValues) {
   //    cout<<"rangeQuery(lo="<<lo<<" hi="<<hi<<")"<<endl;
   timestamp_t ts;
+  bool ok;
   long i = 0;
   while (true) {
     int cnt = 0;
@@ -471,22 +479,30 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     SOFTWARE_BARRIER;
     nodeptr pred = p_head;
     nodeptr curr = nullptr;
-#ifdef BUNDLE_OPTIMIZE_RQS
+#ifdef BUNDLE_RESTARTING_RQS
+    // Phase 1. Pre-range traversal
     for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];
       while (curr->key < lo) {
         pred = curr;
-        curr = pred->p_next[level];
+        curr = curr->p_next[level];
       }
     }
 #endif
-    // Perform the traversal using the bundles.
-    curr = pred->rqbundle.getPtrByTimestamp(ts);
+    // Phase 2. Enter snapshot
+    if (unlikely(!pred->rqbundle.getPtrByTimestamp(ts, &curr))) {
+      rqProvider->end_traversal(tid);
+      recmgr->enterQuiescentState(tid);
+      continue;
+    }
+
+    // Phase 3. Collect range
     while (curr != nullptr && curr->key <= hi) {
       if (curr->key >= lo) {
         cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
       }
-      curr = curr->rqbundle.getPtrByTimestamp(ts);
+      ok = curr->rqbundle.getPtrByTimestamp(ts, &curr);
+      assert(ok);
     }
     rqProvider->end_traversal(tid);
     recmgr->enterQuiescentState(tid);

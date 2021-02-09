@@ -115,12 +115,19 @@ class LinkedBundle {
     // Since we have a lock on this node presently, we are able to use a less
     // stringent memory order
     new_entry->next_.store(head_, std::memory_order_relaxed);
-    head_ = new_entry;
+    head_.store(new_entry, std::memory_order_relaxed);
 #ifdef BUNDLE_DEBUG
     ++updates;
 #endif
     return;
 #endif
+  }
+
+  inline void abort() {
+    assert(head_->ts_ == BUNDLE_PENDING_TIMESTAMP);
+    NodeType* entry = head_;
+    head_ = entry->ptr_;
+    delete entry;
   }
 
   // Labels the pending entry to make it visible to range queries.
@@ -131,10 +138,10 @@ class LinkedBundle {
   }
 
   // Returns a reference to the node that immediately followed at timestamp ts.
-  inline NodeType *getPtrByTimestamp(timestamp_t ts) {
+  inline bool getPtrByTimestamp(timestamp_t ts, NodeType **next) {
     // Start at head and work backwards until edge is found.
     BundleEntry<NodeType> *curr = head_;
-    long i = 0;
+    // long i = 0;
     while (unlikely(curr->ts_ == BUNDLE_PENDING_TIMESTAMP)) {
       // DEBUG_PRINT("getPtrByTimestamp");
       CPU_RELAX;
@@ -149,7 +156,12 @@ class LinkedBundle {
       exit(1);
     }
 #endif
-    return curr->ptr_;
+    if (curr != tail_) {
+      *next = curr->ptr_;
+      return true;
+    } else {
+      return false;
+    }
   }
 
   // Reclaims any edges that are older than ts. At the moment this should be

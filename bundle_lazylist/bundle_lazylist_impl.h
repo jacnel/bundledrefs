@@ -29,7 +29,7 @@ class node_t {
                // used with the lock-free RQProvider (which requires all fields
                // that are modified at linearization points of operations to be
                // at least as large as a machine word)
-  BUNDLE_TYPE_DECL<node_t<K,V>> rqbundle;
+  BUNDLE_TYPE_DECL<node_t<K, V>> rqbundle;
 
   node_t() {}
 
@@ -125,7 +125,7 @@ template <typename K, typename V, class RecManager>
 nodeptr bundle_lazylist<K, V, RecManager>::new_node(const int tid, const K& key,
                                                     const V& val,
                                                     nodeptr next) {
-  nodeptr nnode = recordmgr->template allocate< node_t<K, V> >(tid);
+  nodeptr nnode = recordmgr->template allocate<node_t<K, V>>(tid);
   if (nnode == NULL) {
     cout << "out of memory" << endl;
     exit(1);
@@ -206,8 +206,8 @@ V bundle_lazylist<K, V, RecManager>::doInsert(const int tid, const K& key,
       newnode = new_node(tid, key, val, curr);
 
       // Prepare bundles.
-      BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&newnode->rqbundle, &pred->rqbundle,
-                                         nullptr};
+      BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&newnode->rqbundle,
+                                                   &pred->rqbundle, nullptr};
       nodeptr ptrs[] = {curr, newnode, nullptr};
       rqProvider->prepare_bundles(bundles, ptrs);
 
@@ -294,29 +294,45 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   V* const resultValues) {
   timestamp_t ts;
   int cnt = 0;
+  bool ok;
   for (;;) {
     recordmgr->leaveQuiescentState(tid, true);
 
     // Read gloabl timestamp and announce self.
     ts = rqProvider->start_traversal(tid);
+    nodeptr curr = head;
+    nodeptr pred = curr;
 
+#ifdef BUNDLE_RESTARTING_RQS
     // Phase 1. Traverse to node immediately preceding range.
-    nodeptr pred = head;
-    nodeptr curr = pred->next;
     while (curr->key < lo) {
       pred = curr;
       curr = curr->next;
     }
     assert(curr != nullptr);
+#endif
 
     // Phase 2. Enter range using bundles.
-    curr = pred->rqbundle.getPtrByTimestamp(ts);
+    if (!pred->rqbundle.getPtrByTimestamp(ts, &curr)) {
+#ifdef BUNDLE_RESTARTING_RQS
+      // If entering the range fails, then restart.
+      rqProvider->end_traversal(tid);
+      recordmgr->enterQuiescentState(tid);
+      continue;
+#else
+      assert(false);
+#endif
+    }
+
+    // Phase 3. Range collect.
     while (curr != nullptr && curr->key <= hi) {
       if (curr->key >= lo) {
         // Phase 3. Collect snapshot while in the range.
         cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
       }
-      curr = curr->rqbundle.getPtrByTimestamp(ts);
+      ok = curr->rqbundle.getPtrByTimestamp(ts, &curr);
+      assert(
+          ok);  // At this point we should always find a bundle entry to follow
     }
 
     // Clears entry in active range query array.
