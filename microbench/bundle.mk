@@ -34,7 +34,7 @@ FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 ## the range then it can perform its collect operation without the
 ## possibility of restarts.
 # ------------------------.
-FLAGS +=  -DBUNDLE_OPTIMIZE_RQS
+# FLAGS +=  -DBUNDLE_RESTARTING_RQS
 # ------------------------
 
 ## Relaxation optimization. If this is enabled, then threads will 

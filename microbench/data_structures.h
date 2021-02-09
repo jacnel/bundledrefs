@@ -147,8 +147,8 @@ using namespace bst_ns;
   cout << "sizes: node=" << (sizeof(node_t<test_type, test_type>)) << endl;
 
 #elif defined(LAZYLIST)
-#include "lazylist_impl.h"
 #include "record_manager.h"
+#include "lazylist_impl.h"
 
 #define DS_DECLARATION lazylist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T \
@@ -334,8 +334,8 @@ rlu_thread_data_t *rlu_tdata = NULL;
 
 #elif defined(BUNDLE_LIST)
 #define BUNDLE_TYPE_DECL LinkedBundle
-#include "bundle_lazylist_impl.h"
 #include "record_manager.h"
+#include "bundle_lazylist_impl.h"
 
 #define DS_DECLARATION bundle_lazylist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T \
@@ -443,6 +443,7 @@ rlu_thread_data_t *rlu_tdata = NULL;
 
 #elif defined(BUNDLE_BST)
 #define BUNDLE_TYPE_DECL LinkedBundle
+#define BUNDLE_LOCKFREE
 #include "bundle_bst_impl.h"
 #include "record_manager.h"
 using namespace bundle_bst_ns;
@@ -473,8 +474,8 @@ using namespace bundle_bst_ns;
        << " descriptor=" << (sizeof(SCXRecord<test_type, test_type>)) << endl;
 
 #elif defined(UNSAFE_LIST)
-#include "record_manager.h"
 #include "unsafe_lazylist_impl.h"
+#include "record_manager.h"
 
 #define DS_DECLARATION unsafe_lazylist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T \

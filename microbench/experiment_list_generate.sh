@@ -14,8 +14,9 @@ source ./supported.inc
 
 ## Abridged experimental configurations (for artifact evaluation)
 # rqtechniques="lockfree rwlock unsafe rlu lbundle vcas"
-rqtechniques="lbundle unsafe rlu lockfree rwlock"
-datastructures="skiplistlock"
+# rqtechniques="unsafe lockfree rwlock rlu"
+rqtechniques="bundle rbundle tsbundle"
+datastructures="citrus skiplistlock"
 ksizes="100000"
 
 prepare_exp() {
@@ -95,18 +96,19 @@ run_rq_threads() {
   echo "Preparing rq_threads: THROUGHPUT WHILE VARYING THE NUMBER OF THREADS UNDER A FIXED WORKLOAD"
   rqsizes="8 64 256 1024 8092 16184"
   urate=50
-  ksize=100000
   count=0
   prepare_exp "rq_threads" >>experiment_list.txt
   for rqsize in $rqsizes; do
-    for ds in $datastructures; do
-      for alg in $rqtechniques; do
-        check_ds_technique $ds $alg
-        if [ "$?" -ne 0 ]; then continue; fi
-        check_ds_size $ds $k
-        if [ "$?" -ne 0 ]; then continue; fi
-        echo $urate 0 $rqsize $ksize 36 36 $ds $alg >>experiment_list.txt
-        count=$(($count + 1))
+    for k in $ksizes; do
+      for ds in $datastructures; do
+        for alg in $rqtechniques; do
+          check_ds_technique $ds $alg
+          if [ "$?" -ne 0 ]; then continue; fi
+          check_ds_size $ds $k
+          if [ "$?" -ne 0 ]; then continue; fi
+          echo $urate 0 $rqsize $k 24 24 $ds $alg >>experiment_list.txt
+          count=$(($count + 1))
+        done
       done
     done
   done
@@ -115,7 +117,7 @@ run_rq_threads() {
 }
 
 #< Indicates the plotting script should detect this line as an experiment to plot
-run_workloads #<
+# run_workloads #<
 # run_rq_sizes #<
 run_rq_threads #<
 

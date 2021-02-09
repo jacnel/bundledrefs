@@ -12,7 +12,7 @@ COLORS = [
     "rgb(207,233,252)",
     "rgb(188, 189, 34)",
     "rgb(23, 190, 207)",
-    "rgb(23, 190, 207)",
+    "rgb(240, 74, 62)",
     "rgb(23, 190, 207)",
 ]
 
@@ -30,15 +30,15 @@ plotconfig = {
         "macrobench": "RQ_LOCKFREE",
     },
     "rlu": {"label": "RLU", "color": COLORS[4], "symbol": 3, "macrobench": "RQ_RLU"},
-    "lbundle": {
+    "bundle": {
         "label": "Bundle",
         "color": COLORS[3],
         "symbol": 2,
         "macrobench": "RQ_BUNDLE",
     },
-    "ubundle": {
-        "label": "Bundle (fully relaxed)",
-        "color": COLORS[4],
+    "rbundle": {
+        "label": "Bundle-restart",
+        "color": COLORS[7],
         "symbol": 5,
         "macrobench": "",
     },
@@ -49,6 +49,12 @@ plotconfig = {
         "macrobench": "RQ_UNSAFE",
     },
     "vcas": {"label": "vCAS", "color": COLORS[6], "symbol": 6, "macrobench": None},
+    "tsbundle": {
+        "label": "Bundle-rqts",
+        "color": COLORS[8],
+        "symbol": 7,
+        "macrobench": "",
+    },
 }
 
 
@@ -219,14 +225,15 @@ class CSVFile:
     def __str__(self):
         return str(self.df.columns)
 
-    def getdata(self, x_axis, y_axis, filter_col, filter_with):
+    def getdata(self, filter_col, filter_with):
         data = self.df.copy()  # Make a copy of the data frame to return.
         for o, w in zip(filter_col, filter_with):
             # Filter the data for the rows matching the column.
             data = data[data[o] == w]
-        x = sorted(data[x_axis].unique())  # Get the unique x axis values
-        y = data[y_axis].to_numpy()  # Get corresponding y values
-        return {"x": x, "y": y}
+        # x = sorted(data[x_axis].unique())  # Get the unique x axis values
+        # y = data[y_axis].to_numpy()  # Get corresponding y values
+        # return {"x": x, "y": y}
+        return data
 
     # Tries to create a csv file for the given data structure (ds) and number of trials (n).
     @staticmethod

@@ -6,7 +6,7 @@
 
 source ../config.mk
 
-trials=1
+trials=3
 
 cols="%6s %12s %12s %12s %8s %6s %6s %8s %6s %6s %8s %12s %12s %12s %12s"
 headers="step machine ds alg k u rq rqsize nrq nwork trial throughput rqs updates finds"

@@ -67,9 +67,15 @@ flags.DEFINE_integer(
 )
 flags.DEFINE_integer(
     "rqthreads_numrqthreads",
-    36,
+    24,
     "Number of dedicated RQ threads used in the 'rqthreads' experiment",
 )
+flags.DEFINE_list(
+    "rqthreads_rqsizes",
+    [8, 64, 256, 1024, 8092, 16184],
+    "Range query sizes to be used in the 'rqthreads' experiment",
+)
+
 flags.DEFINE_list("experiments", None, "List of experiments to plot")
 flags.DEFINE_list("datastructures", None, "List of data structures to plot")
 flags.DEFINE_list("max_keys", None, "List of max keys to use while plotting")
@@ -87,6 +93,7 @@ def plot_workload(
     max_key,
     u_rate,
     rq_rate,
+    threads,
     ntrials,
     ylabel=False,
     legend=False,
@@ -112,39 +119,31 @@ def plot_workload(
 
     # Read in data for each algorithm
     count = 0
-    for a in algos:
-        data[a] = {}
-        data[a] = csv.getdata(
-            x_axis,
-            y_axis,
-            ["list", "max_key", "u_rate", "rq_rate"],
-            [ds + "-" + a, max_key, u_rate, rq_rate],
-        )
-        count += len(data[a]["x"])
-        data[a]["y"] = data[a]["y"] / 1000000  # Normalize data
+    data = csv.getdata(["max_key", "u_rate", "rq_rate"], [max_key, u_rate, rq_rate])
+    data[y_axis] = data[y_axis] / 1000000
 
-    if count == 0:
+    if data.empty:
         print("No data at given key range: ({}, {})".format(ds, max_key))
         return  # If no data to ploy, then don't
 
     # Plot layout configuration.
     x_axis_layout_["title"] = None
     x_axis_layout_["tickfont"]["size"] = 52
-    x_axis_layout_["nticks"] = 6
+    x_axis_layout_["nticks"] = len(threads)
     if ylabel:
         y_axis_layout_["title"]["text"] = "Mops/s"
         y_axis_layout_["title"]["font"]["size"] = 50
     else:
         y_axis_layout_["title"] = None
-    y_axis_layout_["tickfont"]["size"] = 52
+    y_axis_layout_["tickfont"]["size"] = 50
     y_axis_layout_["nticks"] = 5
     legend_layout_ = (
-        {"font": legend_font_, "orientation": "v", "x": 0, "y": 1.15} if legend else {}
+        {"font": legend_font_, "orientation": "v", "x": 1.05, "y": 1} if legend else {}
     )
     layout_["legend"] = legend_layout_
     layout_["autosize"] = False
     layout_["width"] = 750
-    layout_["height"] = 550
+    layout_["height"] = 450
 
     fig = go.Figure(layout=layout_)
     for a in algos:
@@ -158,18 +157,11 @@ def plot_workload(
         }
         line_ = {"width": 10}
         name_ = "<b>" + plotconfig[a]["label"] + "</b>"
+        y_ = data[data["list"] == ds + "-" + a]
+        y_ = y_[y_.wrk_threads.isin(threads)]["tot_thruput"]
         fig.add_scatter(
-            x=data[a]["x"],
-            y=data[a]["y"],
-            name=name_,
-            marker=marker_,
-            line=line_,
-            showlegend=legend,
+            x=threads, y=y_, name=name_, marker=marker_, line=line_, showlegend=legend,
         )
-
-        # Comment the above line and uncomment below to show fewer points per plot.
-        # fig.add_scatter(x=data[a]['x'][0::2], y=data[a]['y'][0::2], name=name_,
-        #                 marker=marker_, line=line_, showlegend=legend)
 
     if not save:
         fig.show()
@@ -189,7 +181,7 @@ def plot_workload(
 
     # Print speedup for paper.
     if FLAGS.print_speedup:
-        ignore = ["ubundle"]
+        ignore = ["ubundle", "vcas"]
         overalgo = "unsafe"
         overalgos = [
             k for k in plotconfig.keys() if (k not in ignore and k != overalgo)
@@ -197,32 +189,45 @@ def plot_workload(
         print('Speedup over "unsafe" for ' + ds + " @ " + str(u_rate) + "% updates\n")
         threads_printed = False
         for o in overalgos:
+            o_name = ds + "-" + o
             if not threads_printed:
                 print("{:<15}|".format("algorithm"), end="")
-                for i in range(len(data[o]["x"]) // 2):
+                for i in range(len(threads) // 2):
                     print("{:10}".format(""), end="")
                 print("# threads")
                 print("{:15}|".format("---------------"), end="")
-                for i in range(len(data[o]["x"])):
+                for i in range(len(threads)):
                     print("{:10}".format("----------"), end="")
                 print()
                 print("{:<15}|".format(""), end="")
-                for t in data[o]["x"]:
+                for t in threads:
                     print("{:>10}".format(t), end="")
                 print()
                 print("{:<15}|".format(""), end="")
-                for t in data[o]["x"]:
+                for t in threads:
                     print("{:>10}".format("-----"), end="")
                 threads_printed = True
 
-            if len(data[o]["x"]) == 0:
+            if len(threads) == 0:
                 continue
             print("\n{:15}|".format(""))
             print("{:<15}{}".format(o, "|"), end="")
-            for i in range(0, len(data[o]["x"])):
-                print(
-                    "{:>10.3}".format(data[o]["y"][i] / data[overalgo]["y"][i]), end=""
-                )
+            for t in threads:
+                numerator = data[data["list"] == o_name]
+                numerator = numerator[numerator["wrk_threads"] == t]["tot_thruput"]
+                denominator = data[data["list"] == ds + "-" + overalgo]
+                denominator = denominator[denominator["wrk_threads"] == t][
+                    "tot_thruput"
+                ]
+                try:
+                    print(
+                        "{:>10.3}".format(numerator.values[0] / denominator.values[0]),
+                        end="",
+                    )
+                except:
+                    print(
+                        "{:>10}".format("-"), end="",
+                    )
         print("\n\n")
 
 
@@ -432,13 +437,22 @@ def plot_rq_sizes(
     if not save:
         fig.show()
     else:
-        filename = "rqsize_maxkey" + str(max_key) + ".html"
+        filename = "rqsize_maxkey" + str(max_key) + ".pdf"
         subdir = os.path.join(save_dir, "rqsizes")
-        fig.write_html(os.path.join(subdir, filename))
+        # fig.write_html(os.path.join(subdir, filename))
+        fig.write_image(os.path.join(subdir, filename))
 
 
 def plot_rq_threads(
-    dirpath, ds, max_key, ntrials, ylabel=False, legend=False, save=False, save_dir=""
+    dirpath,
+    ds,
+    max_key,
+    ntrials,
+    rqsizes,
+    ylabel=False,
+    legend=False,
+    save=False,
+    save_dir="",
 ):
     reset_base_config()
     csv_path = os.path.join(dirpath, "rq_threads")
@@ -452,48 +466,59 @@ def plot_rq_threads(
     algos = [k for k in plotconfig.keys() if k not in ignore]
 
     count = 0
-    data = {}
+    data = csv.getdata(
+        ["max_key", "rq_threads"], [max_key, FLAGS.rqthreads_numrqthreads]
+    )
+    # Normalize
     for y_axis in y_axes:
-        data[y_axis] = {}
-        for a in algos:
-            data[y_axis][a] = {}
-            data[y_axis][a] = csv.getdata(
-                x_axis,
-                y_axis,
-                ["list", "max_key", "rq_threads"],
-                [ds + "-" + a, max_key, FLAGS.rqthreads_numrqthreads],
-            )
-            count += len(data[y_axis][a]["x"])
-            data[y_axis][a]["y"] = (
-                data[y_axis][a]["y"] / 1000000
-            )  # Normalize data to Mops
+        data[y_axis] = data[y_axis] / 1000000
 
-    if count == 0:
+    if data.empty:
         print("No data: ({}, {})".format(ds, max_key))
         return  # If no data to ploy, then don't
 
     # Plot layout configuration.
-    x_axis_layout_["title"] = None
-    x_axis_layout_["tickfont"]["size"] = 52
-    x_axis_layout_["nticks"] = 6
-    if ylabel:
-        y_axis_layout_["title"]["text"] = "Mops/s"
-        y_axis_layout_["title"]["font"]["size"] = 50
-    else:
-        y_axis_layout_["title"] = None
-    y_axis_layout_["tickfont"]["size"] = 52
-    y_axis_layout_["nticks"] = 5
     legend_layout_ = (
-        {"font": legend_font_, "orientation": "v", "x": 0, "y": 1.15} if legend else {}
+        {"font": legend_font_, "orientation": "v", "x": 1.15, "y": 1} if legend else {}
     )
     layout_["legend"] = legend_layout_
     layout_["autosize"] = False
-    layout_["width"] = 750
-    layout_["height"] = 550
+    layout_["width"] = 1250
+    layout_["height"] = 450
 
     # fig = go.Figure(layout=layout_)
-    fig = make_subplots(rows=1, cols=2)
-    # fig.update_layout(layout_)
+    fig = make_subplots(rows=1, cols=2, horizontal_spacing=0.1)
+    fig.update_layout(layout_)
+    fig.update_xaxes(
+        title_text=None,
+        tickfont=axis_font_,
+        title_font=axis_font_,
+        tickfont_size=32,
+        nticks=len(rqsizes),
+        zerolinecolor="black",
+        gridcolor="black",
+        gridwidth=2,
+        linecolor="black",
+        linewidth=4,
+        mirror=True,
+        type="log",
+        dtick=math.log10(4)
+    )
+    fig.update_yaxes(
+        tickfont=axis_font_,
+        title_font=axis_font_,
+        nticks=3,
+        title_font_size=32,
+        tickfont_size=32,
+        zerolinecolor="black",
+        gridcolor="black",
+        gridwidth=2,
+        linecolor="black",
+        linewidth=4,
+        mirror=True
+    )
+    fig.update_yaxes(title_text="Mops/s", col=1, row=1)
+    # fig.update_yaxes(title_text="RQ Mops/s", col=2, row=1)
     for y_axis, i in zip(y_axes, range(0, len(y_axes))):
         for a in algos:
             symbol_ = plotconfig[a]["symbol"]
@@ -506,22 +531,21 @@ def plot_rq_threads(
             }
             line_ = {"width": 10}
             name_ = "<b>" + plotconfig[a]["label"] + "</b>"
+            x_ = rqsizes
+            y_ = data[data["list"] == ds + "-" + a]
+            y_ = y_[y_.rq_size.isin(rqsizes)][y_axis]
             fig.add_scatter(
-                x=data[y_axis][a]["x"],
-                y=data[y_axis][a]["y"],
+                x=x_,
+                y=y_,
                 name=name_,
                 marker=marker_,
                 line=line_,
-                showlegend=legend,
+                showlegend=(legend if i == 0 else False),
+                legendgroup=a,
                 row=1,
                 col=i + 1,
             )
 
-            # Comment the above line and uncomment below to show fewer points per plot.
-            # fig.add_scatter(x=data[a]['x'][0::2], y=data[a]['y'][0::2], name=name_,
-            #                 marker=marker_, line=line_, showlegend=legend)
-
-    fig.update_xaxes(type="log", dtick=math.log10(2))
 
     if not save:
         fig.show()
@@ -650,7 +674,7 @@ def get_threads_config():
     else:
         assert FLAGS.nthreads is not None
         for n in FLAGS.nthreads:
-            nthreads += int(n)
+            nthreads.append(int(n))
     return nthreads
 
 
@@ -684,6 +708,10 @@ def main(argv):
         nthreads = get_threads_config()
         print("Thread configuration: " + str(nthreads))
         experiments, microbench_configs = get_microbench_configs()
+        if FLAGS.datastructures is not None:
+            microbench_configs["datastructures"] = FLAGS.datastructures
+        if FLAGS.max_keys is not None:
+            microbench_configs["ksizes"] = [int(k) for k in FLAGS.max_keys]
         print("Experiments to plot: " + str(experiments))
         print("Data structures and key ranges: " + str(microbench_configs))
 
@@ -706,8 +734,9 @@ def main(argv):
                             k,
                             u,
                             (FLAGS.workloads_rqrate if u != 100 else 0),
+                            nthreads,
                             ntrials,
-                            True,
+                            False,
                             True,
                             FLAGS.save_plots,
                             os.path.join(FLAGS.save_dir, "microbench"),
@@ -721,6 +750,7 @@ def main(argv):
                         ds,
                         k,
                         ntrials,
+                        FLAGS.rqthreads_rqsizes,
                         True,
                         True,
                         FLAGS.save_plots,
