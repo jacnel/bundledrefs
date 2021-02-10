@@ -19,7 +19,7 @@ COLORS = [
 plotconfig = {
     "rwlock": {
         "label": "EBR-RQ",
-        "color": COLORS[0],
+        "color": COLORS[7],
         "symbol": 1,
         "macrobench": "RQ_RWLOCK",
     },
@@ -38,7 +38,7 @@ plotconfig = {
     },
     "rbundle": {
         "label": "Bundle-restart",
-        "color": COLORS[7],
+        "color": COLORS[0],
         "symbol": 5,
         "macrobench": "",
     },

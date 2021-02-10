@@ -156,7 +156,82 @@ const pair<V, bool> bundle_citrustree<K, V, RecManager>::find(const int tid,
 template <typename K, typename V, class RecManager>
 bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
                                                    const K& key) {
-  return find(tid, key).second;
+  while (true) {
+    recordmgr->leaveQuiescentState(tid, true);
+    timestamp_t ts = rqProvider->start_traversal(tid);
+    readLock();
+    nodeptr curr = root->child[0];
+    nodeptr pred = root;
+    bool in_snapshot = false;
+    int child = 0;
+    K ckey = curr->key;
+    bool ok;
+#ifdef BUNDLE_RESTARTS
+    while (curr != NULL && ckey != key) {
+      pred = curr;
+      if (ckey > key) {
+        child = 0;
+        curr = curr->child[0];
+      }
+      if (ckey < key) {
+        child = 1;
+        curr = curr->child[1];
+      }
+      if (curr != NULL) ckey = curr->key;
+    }
+#else
+    ok = pred->rqbundle[0].getPtrByTimestamp(ts, &curr);
+    assert(ok);
+    while (curr != NULL && ckey != key) {
+      pred = curr;
+      if (ckey > key) {
+        ok = pred->rqbundle[0].getPtrByTimestamp(ts, &curr);
+        assert(ok);
+      }
+      if (ckey < key) {
+        ok = pred->rqbundle[1].getPtrByTimestamp(ts, &curr);
+        assert(ok);
+      }
+      if (curr != NULL) ckey = curr->key;
+    }
+    in_snapshot = true;
+#endif
+
+    // Enter snapshot.
+    if (!in_snapshot && !pred->rqbundle[child].getPtrByTimestamp(ts, &curr)) {
+        rqProvider->end_traversal(tid);
+        recordmgr->enterQuiescentState(tid);
+        // continue;
+        return false;
+    }
+
+    // Find key using bundles.
+    if (curr != NULL)
+      ckey = curr->key;  // Necessary because previous ckey may not reflect node
+                         // pointed to by the bundle
+    while (curr != NULL && ckey != key) {
+      if (ckey > key) {
+        ok = curr->rqbundle[0].getPtrByTimestamp(ts, &curr);
+        assert(ok);
+      }
+      if (ckey < key) {
+        ok = curr->rqbundle[1].getPtrByTimestamp(ts, &curr);
+        assert(ok);
+      }
+      if (curr != NULL) ckey = curr->key;
+    }
+
+    readUnlock();
+    if (curr == NULL) {
+      rqProvider->end_traversal(tid);
+      recordmgr->enterQuiescentState(tid);
+      return false;
+    }
+    V result = curr->value;
+    rqProvider->end_traversal(tid);
+    recordmgr->enterQuiescentState(tid);
+    return true;
+  }
 }
 
 template <typename K, typename V, class RecManager>
@@ -451,7 +526,7 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     bool restart = false;
     bool ok;
     while (curr != nullptr) {
-#ifndef BUNDLE_RESTARTING_RQS
+#ifndef BUNDLE_RESTARTS
       if (curr->key >= lo && curr->key <= hi) {
         break;
       } else if (curr->key < lo) {

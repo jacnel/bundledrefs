@@ -125,7 +125,7 @@ class LinkedBundle {
 
   inline void abort() {
     assert(head_->ts_ == BUNDLE_PENDING_TIMESTAMP);
-    NodeType* entry = head_;
+    NodeType *entry = head_;
     head_ = entry->ptr_;
     delete entry;
   }
@@ -141,27 +141,27 @@ class LinkedBundle {
   inline bool getPtrByTimestamp(timestamp_t ts, NodeType **next) {
     // Start at head and work backwards until edge is found.
     BundleEntry<NodeType> *curr = head_;
+    *next = curr->ptr_;
+    return true;
     // long i = 0;
-    while (unlikely(curr->ts_ == BUNDLE_PENDING_TIMESTAMP)) {
-      // DEBUG_PRINT("getPtrByTimestamp");
-      CPU_RELAX;
-    }
-    while (unlikely(curr != tail_ && curr->ts_ > ts)) {
-      assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
-      curr = curr->next_;
-    }
-#ifdef BUNDLE_DEBUG
-    if (curr->marked()) {
-      std::cout << dump(0) << std::flush;
-      exit(1);
-    }
-#endif
-    if (curr != tail_) {
-      *next = curr->ptr_;
-      return true;
-    } else {
-      return false;
-    }
+//     while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP)
+//       ;
+//     while (curr != tail_ && curr->ts_ > ts) {
+//       assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
+//       curr = curr->next_;
+//     }
+// #ifdef BUNDLE_DEBUG
+//     if (curr->marked()) {
+//       std::cout << dump(0) << std::flush;
+//       exit(1);
+//     }
+// #endif
+//     if (curr != tail_) {
+//       *next = curr->ptr_;
+//       return true;
+//     } else {
+//       return false;
+//     }
   }
 
   // Reclaims any edges that are older than ts. At the moment this should be

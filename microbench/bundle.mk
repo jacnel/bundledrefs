@@ -19,8 +19,8 @@ FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 ## bundle entries
 # ------------------------.
 # FLAGS += -DBUNDLE_CLEANUP_UPDATE
-# FLAGS += -DBUNDLE_CLEANUP_BACKGROUND
-# FLAGS += -DBUNDLE_CLEANUP_SLEEP=100000  # ns
+FLAGS += -DBUNDLE_CLEANUP_BACKGROUND
+FLAGS += -DBUNDLE_CLEANUP_SLEEP=100000  # ns
 # --------------------------
 
 # FLAGS += -DBUNDLE_UPDATE_USES_CAS
@@ -34,7 +34,7 @@ FLAGS += -DBUNDLE_PRINT_BUNDLE_STATS
 ## the range then it can perform its collect operation without the
 ## possibility of restarts.
 # ------------------------.
-# FLAGS +=  -DBUNDLE_RESTARTING_RQS
+# FLAGS +=  -DBUNDLE_RESTARTS
 # ------------------------
 
 ## Relaxation optimization. If this is enabled, then threads will 

@@ -143,7 +143,7 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
   p_head = allocateNode(dummyTid);
   initNode(dummyTid, p_head, KEY_MIN, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
 
-  BUNDLE_TYPE_DECL<node_t<K,V>> * bundles[] = {&p_head->rqbundle, nullptr};
+  BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&p_head->rqbundle, nullptr};
   nodeptr ptrs[] = {p_tail, nullptr};
   rqProvider->prepare_bundles(bundles, ptrs);
   timestamp_t ts = rqProvider->get_update_lin_time(dummyTid);
@@ -206,15 +206,40 @@ bool bundle_skiplist<K, V, RecManager>::contains(const int tid, K key) {
   nodeptr p_found = NULL;
   int lFound;
   bool res;
-  recmgr->leaveQuiescentState(tid, true);
-  lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
-  res = (lFound != -1) && p_succs[lFound]->fullyLinked &&
-        !p_succs[lFound]->marked;
-#ifdef RQ_SNAPCOLLECTOR
-  if (lFound != -1) rqProvider->search_report_target_key(tid, key, p_found);
+
+  while (true) {
+    recmgr->leaveQuiescentState(tid, true);
+    timestamp_t ts = rqProvider->start_traversal(tid);
+#ifdef BUNDLE_RESTARTS
+    lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
+    nodeptr pred = p_preds[0];
+#else
+    nodeptr pred = p_head;
 #endif
-  recmgr->enterQuiescentState(tid);
-  return res;
+
+    // Enter snapshot
+    nodeptr curr = nullptr;
+    if (!pred->rqbundle.getPtrByTimestamp(ts, &curr)) {
+      // Failed to enter snapshot. Restart.
+      rqProvider->end_traversal(tid);
+      recmgr->enterQuiescentState(tid);
+      continue;
+    } else {
+      // Snapshot entered. Traverse using bundles.
+      while (curr->key < key) {
+        bool ok = curr->rqbundle.getPtrByTimestamp(ts, &curr);
+        assert(ok);
+      }
+      if (curr->key == key) {
+        res = true;
+      } else {
+        res = false;
+      }
+      rqProvider->end_traversal(tid);
+      recmgr->enterQuiescentState(tid);
+      return res;
+    }
+  }
 }
 
 template <typename K, typename V, class RecManager>
@@ -479,7 +504,7 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     SOFTWARE_BARRIER;
     nodeptr pred = p_head;
     nodeptr curr = nullptr;
-#ifdef BUNDLE_RESTARTING_RQS
+#ifdef BUNDLE_RESTARTS
     // Phase 1. Pre-range traversal
     for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];

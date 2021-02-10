@@ -288,6 +288,34 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K& key) {
 }
 
 template <typename K, typename V, class RecManager>
+inline nodeptr bundle_lazylist<K, V, RecManager>::preRange(const int tid,
+                                                           nodeptr start,
+                                                           const K& lo,
+                                                           const K& hi) {
+  nodeptr curr = start;
+  nodeptr pred = curr;
+  // Phase 1. Traverse to node immediately preceding range.
+  while (curr->key < lo) {
+    pred = curr;
+#ifdef BUNDLE_RESTARTS
+    curr = curr->next;
+#else
+    bool ok = curr->rqbundle.getPtrByTimestamp(ts, &curr);
+    assert(ok);
+#endif
+  }
+  assert(curr != nullptr);
+  return pred;
+}
+
+template <typename K, typename V, class RecManager>
+inline bool bundle_lazylist<K, V, RecManager>::enterSnapshot(
+    const int tid, nodeptr pred,
+    timestamp_t ts, nodeptr next) {
+  return pred->rqbundle.getPtrByTimestamp(ts, &next);
+}
+
+template <typename K, typename V, class RecManager>
 int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   const K& hi,
                                                   K* const resultKeys,
@@ -303,7 +331,7 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     nodeptr curr = head;
     nodeptr pred = curr;
 
-#ifdef BUNDLE_RESTARTING_RQS
+#ifdef BUNDLE_RESTARTS
     // Phase 1. Traverse to node immediately preceding range.
     while (curr->key < lo) {
       pred = curr;
@@ -313,16 +341,14 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
 #endif
 
     // Phase 2. Enter range using bundles.
-    if (!pred->rqbundle.getPtrByTimestamp(ts, &curr)) {
-#ifdef BUNDLE_RESTARTING_RQS
+#ifdef BUNDLE_RESTARTS
+    if (!enterSnapshot(tid, pred, ts, curr)) {
       // If entering the range fails, then restart.
       rqProvider->end_traversal(tid);
       recordmgr->enterQuiescentState(tid);
       continue;
-#else
-      assert(false);
-#endif
     }
+#endif
 
     // Phase 3. Range collect.
     while (curr != nullptr && curr->key <= hi) {

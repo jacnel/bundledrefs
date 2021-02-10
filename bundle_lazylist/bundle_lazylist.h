@@ -36,6 +36,10 @@ class bundle_lazylist {
       0,
   };
 
+  nodeptr preRange(const int tid, nodeptr start, const K& lo, const K& hi);
+
+  bool enterSnapshot(const int tid, nodeptr pred, timestamp_t ts, nodeptr next);
+
  public:
   const K KEY_MIN;
   const K KEY_MAX;
@@ -149,7 +153,7 @@ class bundle_lazylist {
           max_node = curr;
         }
         total += size;
-        delete [] entries;
+        delete[] entries;
       }
     }
 

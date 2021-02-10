@@ -24,20 +24,8 @@
 #error NO BUNDLE TYPE DEFINED
 #endif
 
-// NOTES ON IMPLEMENTATION DETAILS.
-// --------------------------------
-// The active RQ array is the total number of processes to accomodate any
-// number of range query threads. Snapshots are still taken by iterating over
-// the list.
+#include "common_bundle.h"
 
-// Ensures consistent view of data structure for range queries by augmenting
-// updates to keep track of their linearization points and observe any active
-// range queries.
-template <typename K, typename V, typename NodeType, typename DataStructure,
-          typename RecordManager, bool logicalDeletion,
-          bool canRetireNodesLogicallyDeletedByOtherProcesses>
-class RQProvider {
- private:
 #define __THREAD_DATA_SIZE 1024
   // Used to announce an active range query and its linearization point.
   union __rq_thread_data {
@@ -53,11 +41,26 @@ class RQProvider {
     volatile char bytes[__THREAD_DATA_SIZE];
   } __attribute__((aligned(__THREAD_DATA_SIZE)));
 
+// NOTES ON IMPLEMENTATION DETAILS.
+// --------------------------------
+// The active RQ array is the total number of processes to accomodate any
+// number of range query threads. Snapshots are still taken by iterating over
+// the list.
+
+// Ensures consistent view of data structure for range queries by augmenting
+// updates to keep track of their linearization points and observe any active
+// range queries.
+template <typename K, typename V, typename NodeType, typename DataStructure,
+          typename RecordManager, bool logicalDeletion,
+          bool canRetireNodesLogicallyDeletedByOtherProcesses>
+class RQProvider {
+ private:
   // Timestamp used by range queries to linearize accesses.
   std::atomic<timestamp_t> curr_timestamp_;
   volatile char pad0[PREFETCH_SIZE_BYTES];
   // Array of RQ announcements. One per thread.
   __rq_thread_data *rq_thread_data_;
+  volatile char pad1[PREFETCH_SIZE_BYTES];
   // Number of processes concurrently operating on the data structure.
   const int num_processes_;
 
@@ -204,15 +207,16 @@ class RQProvider {
       ++rq_thread_data_[tid].data.local_timestamp;
       return curr_timestamp_;
     }
-#elif defined(BUNDLE_UPDATE_USES_CAS)
-    timestamp_t ts = curr_timestamp_;
-    if (curr_timestamp_.compare_exchange_strong(ts, ts + 1)) {
-      return ts + 1;
-    } else {
-      return ts;
-    }
+// #elif defined(BUNDLE_UPDATE_USES_CAS)
 #else
+    // timestamp_t ts = curr_timestamp_;
+    // if (curr_timestamp_.compare_exchange_strong(ts, ts + 1)) {
+    //   return ts + 1;
+    // } else {
+    //   return ts;
+    // }
     return curr_timestamp_.fetch_add(1) + 1;
+    // return curr_timestamp_;
 #endif
     // return curr_timestamp_;
 #else
@@ -235,10 +239,12 @@ class RQProvider {
 #endif
 
 #ifndef BUNDLE_UNSAFE_BUNDLE
-    rq_thread_data_[tid].data.rq_flag = true;
-    rq_thread_data_[tid].data.rq_lin_time = curr_timestamp_;
-    rq_thread_data_[tid].data.rq_flag = false;
-    return rq_thread_data_[tid].data.rq_lin_time;
+    // rq_thread_data_[tid].data.rq_flag = true;
+    // rq_thread_data_[tid].data.rq_lin_time = curr_timestamp_;
+    // rq_thread_data_[tid].data.rq_flag = false;
+    // return rq_thread_data_[tid].data.rq_lin_time;
+    // return curr_timestamp_;
+    return BUNDLE_MAX_TIMESTAMP;
 #else
     return BUNDLE_MIN_TIMESTAMP;
 #endif
@@ -274,7 +280,7 @@ class RQProvider {
   // edge we needed.
   inline void end_traversal(int tid) {
 #ifndef BUNDLE_UNSAFE_BUNDLE
-    rq_thread_data_[tid].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
+    // rq_thread_data_[tid].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
 #endif
   }
 
