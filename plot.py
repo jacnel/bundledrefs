@@ -1,10 +1,4 @@
 import numpy as np
-import plotly
-import plotly.graph_objects as go
-from plotly import subplots
-from plot_util import *
-
-# from plot_config import *
 import argparse
 from plotly.subplots import make_subplots
 import math
@@ -125,6 +119,10 @@ def plot_workload(
 
     if count == 0:
         print("No data at given key range: ({}, {})".format(ds, max_key))
+        return  # If no data to ploy, then don't
+
+    if count == 0:
+        print('No data at given key range: ({}, {})'.format(ds, max_key))
         return  # If no data to ploy, then don't
 
     # Plot layout configuration.
