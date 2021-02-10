@@ -160,7 +160,7 @@ class RQProvider {
 
 #define BUNDLE_INIT_CLEANUP(provider) \
   const timestamp_t ts = provider->get_oldest_active_rq();
-#define BUNDLE_CLEAN_BUNDLE(bundle) bundle->reclaimEntries(ts)
+#define BUNDLE_CLEAN_BUNDLE(bundle) bundle.reclaimEntries(ts)
 
   // Creates a snapshot of the current state of active RQs.
   inline timestamp_t get_oldest_active_rq() {
@@ -243,8 +243,8 @@ class RQProvider {
     // rq_thread_data_[tid].data.rq_lin_time = curr_timestamp_;
     // rq_thread_data_[tid].data.rq_flag = false;
     // return rq_thread_data_[tid].data.rq_lin_time;
-    // return curr_timestamp_;
-    return BUNDLE_MAX_TIMESTAMP;
+    return curr_timestamp_;
+    // return BUNDLE_MAX_TIMESTAMP;
 #else
     return BUNDLE_MIN_TIMESTAMP;
 #endif

@@ -48,7 +48,6 @@ using namespace std;
 
 template <typename K, typename V>
 struct node_t {
-  BUNDLE_TYPE_DECL<node_t<K, V>> rqbundle[2];
   struct {
     K key;
     V value;
@@ -57,6 +56,7 @@ struct node_t {
     volatile int lock;
     bool marked;
   };
+  BUNDLE_TYPE_DECL<node_t<K, V>> rqbundle[2];
 
   ~node_t() {}
 

@@ -18,7 +18,7 @@
 # pinning_policy="-bind 0-7,16-23,8-15,24-31"
 
 ## The following was used for our experiments.
-maxthreads=48
+maxthreads=192
 maxthreads_powerof2=256
 threadincrement=48
 cpu_freq_ghz=2.1

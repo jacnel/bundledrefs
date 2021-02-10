@@ -156,6 +156,7 @@ const pair<V, bool> bundle_citrustree<K, V, RecManager>::find(const int tid,
 template <typename K, typename V, class RecManager>
 bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
                                                    const K& key) {
+  // return find(tid, key).second;
   while (true) {
     recordmgr->leaveQuiescentState(tid, true);
     timestamp_t ts = rqProvider->start_traversal(tid);
@@ -182,6 +183,7 @@ bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
 #else
     ok = pred->rqbundle[0].getPtrByTimestamp(ts, &curr);
     assert(ok);
+    in_snapshot = true;
     while (curr != NULL && ckey != key) {
       pred = curr;
       if (ckey > key) {
@@ -194,15 +196,13 @@ bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
       }
       if (curr != NULL) ckey = curr->key;
     }
-    in_snapshot = true;
 #endif
 
     // Enter snapshot.
     if (!in_snapshot && !pred->rqbundle[child].getPtrByTimestamp(ts, &curr)) {
-        rqProvider->end_traversal(tid);
-        recordmgr->enterQuiescentState(tid);
-        // continue;
-        return false;
+      rqProvider->end_traversal(tid);
+      recordmgr->enterQuiescentState(tid);
+      continue;
     }
 
     // Find key using bundles.
