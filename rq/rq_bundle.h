@@ -16,9 +16,13 @@
 
 #if defined BUNDLE_CIRCULAR_BUNDLE
 #include "circular_bundle.h"
+#error Not implemented
 #elif defined BUNDLE_LINKED_BUNDLE
+#define BUNDLE_TYPE_DECL LinkedBundle
 #include "linked_bundle.h"
 #elif defined BUNDLE_UNSAFE_BUNDLE
+#define BUNDLE_UNSAFE
+#define BUNDLE_TYPE_DECL LinkedBundle
 #include "unsafe_linked_bundle.h"
 #else
 #error NO BUNDLE TYPE DEFINED
@@ -27,19 +31,19 @@
 #include "common_bundle.h"
 
 #define __THREAD_DATA_SIZE 1024
-  // Used to announce an active range query and its linearization point.
-  union __rq_thread_data {
-    struct {
-      volatile timestamp_t rq_lin_time;
-      volatile char pad0[PREFETCH_SIZE_BYTES];
-      std::atomic<bool> rq_flag;
+// Used to announce an active range query and its linearization point.
+union __rq_thread_data {
+  struct {
+    volatile timestamp_t rq_lin_time;
+    volatile char pad0[PREFETCH_SIZE_BYTES];
+    std::atomic<bool> rq_flag;
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
-      volatile char pad1[PREFETCH_SIZE_BYTES];
-      volatile long local_timestamp;
+    volatile char pad1[PREFETCH_SIZE_BYTES];
+    volatile long local_timestamp;
 #endif
-    } data;
-    volatile char bytes[__THREAD_DATA_SIZE];
-  } __attribute__((aligned(__THREAD_DATA_SIZE)));
+  } data;
+  volatile char bytes[__THREAD_DATA_SIZE];
+} __attribute__((aligned(__THREAD_DATA_SIZE)));
 
 // NOTES ON IMPLEMENTATION DETAILS.
 // --------------------------------
@@ -245,8 +249,19 @@ class RQProvider {
     // return rq_thread_data_[tid].data.rq_lin_time;
     return curr_timestamp_;
     // return BUNDLE_MAX_TIMESTAMP;
+#elif defined(BUNDLE_TIMESTAMP_RELAXATION)
+
+  ++rq_thread_data_[tid].data.local_timestamp;
+  if (((rq_thread_data_[tid].data.local_timestamp + 1) %
+       BUNDLE_TIMESTAMP_RELAXATION) == 0) {
+    rq_thread_data_[tid].data.local_timestamp = curr_timestamp_;
+    return rq_thread_data_[tid].data.local_timestamp;
+  } else {
+    return rq_thread_data_[tid].data.local_timestamp /
+  }
+  // #elif defined(BUNDLE_UPDATE_USES_CAS)
 #else
-    return BUNDLE_MIN_TIMESTAMP;
+  return BUNDLE_MIN_TIMESTAMP;
 #endif
   }
 

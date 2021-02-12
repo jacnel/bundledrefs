@@ -84,7 +84,10 @@ flags.DEFINE_integer(
     "ntrials", 3, "Number of trials per experiment (used for averaging results)"
 )
 
-flags.re
+flags.DEFINE_bool("legends", False, "Whether to show legends in the plots")
+flags.DEFINE_bool(
+    "yaxis_titles", False, "Whether to include y-axis titles in the plots"
+)
 
 
 def plot_workload(
@@ -115,6 +118,8 @@ def plot_workload(
 
     # Ignores rows in .csv with the following label
     ignore = ["ubundle"]
+    if ds == "skiplistlock":
+        ignore.append("bundle")
     algos = [k for k in plotconfig.keys() if k not in ignore]
 
     # Read in data for each algorithm
@@ -133,16 +138,17 @@ def plot_workload(
     if ylabel:
         y_axis_layout_["title"]["text"] = "Mops/s"
         y_axis_layout_["title"]["font"]["size"] = 50
+        y_axis_layout_["title"]["standoff"] = 50
     else:
         y_axis_layout_["title"] = None
     y_axis_layout_["tickfont"]["size"] = 50
     y_axis_layout_["nticks"] = 5
     legend_layout_ = (
-        {"font": legend_font_, "orientation": "v", "x": 1.05, "y": 1} if legend else {}
+        {"font": legend_font_, "orientation": "h", "x": 0, "y": 1} if legend else {}
     )
     layout_["legend"] = legend_layout_
     layout_["autosize"] = False
-    layout_["width"] = 750
+    layout_["width"] = 1250 if legend else 550
     layout_["height"] = 450
 
     fig = go.Figure(layout=layout_)
@@ -153,7 +159,7 @@ def plot_workload(
             "symbol": symbol_,
             "color": color_,
             "size": 40,
-            "line": {"width": 5, "color": "black"},
+            "line": {"width": (2 if legend else 5), "color": "black"},
         }
         line_ = {"width": 10}
         name_ = "<b>" + plotconfig[a]["label"] + "</b>"
@@ -494,6 +500,8 @@ def plot_rq_threads(
         tickfont=axis_font_,
         title_font=axis_font_,
         tickfont_size=32,
+        tickangle=30,
+        tickformat=".0f",
         nticks=len(rqsizes),
         zerolinecolor="black",
         gridcolor="black",
@@ -502,11 +510,12 @@ def plot_rq_threads(
         linewidth=4,
         mirror=True,
         type="log",
-        dtick=math.log10(4)
+        dtick=math.log10(4),
     )
     fig.update_yaxes(
         tickfont=axis_font_,
         title_font=axis_font_,
+        title_standoff=50,
         nticks=3,
         title_font_size=32,
         tickfont_size=32,
@@ -515,7 +524,7 @@ def plot_rq_threads(
         gridwidth=2,
         linecolor="black",
         linewidth=4,
-        mirror=True
+        mirror=True,
     )
     fig.update_yaxes(title_text="Mops/s", col=1, row=1)
     # fig.update_yaxes(title_text="RQ Mops/s", col=2, row=1)
@@ -546,7 +555,6 @@ def plot_rq_threads(
                 col=i + 1,
             )
 
-
     if not save:
         fig.show()
     else:
@@ -572,39 +580,39 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
             shell=True,
         )
 
+    xaxis = "nthreads"
+    yaxis = "ixThroughput"
     reset_base_config()
     csv = CSVFile(os.path.join(dirpath, "data.csv"))
-    data = {}
-    for algo in plotconfig.keys():
-        data[algo] = csv.getdata(
-            "nthreads",
-            "ixThroughput",
-            ["rqalg", "datastructure"],
-            [plotconfig[algo]["macrobench"], ds],
-        )
-        data[algo]["y"] = data[algo]["y"] / 1000000  # Normalizes throughput.
+    data = csv.getdata(["datastructure"], [ds],)
+    data[yaxis] = data[yaxis] / 1000000  # Normalizes throughput.
 
-    speedup = {}
-    overalgo = "unsafe"
-    for algo in plotconfig.keys():
-        if algo == overalgo:
-            continue
-        speedup[algo] = {}
-        if data[algo]["y"].size == 0:
-            speedup[algo]["x"] = []
-            speedup[algo]["y"] = []
-            continue
-        speedup[algo]["x"] = data[overalgo]["x"][::2]
-        try:
-            speedup[algo]["y"] = data[algo]["y"][::2] / data[overalgo]["y"][::2]
-        except:
-            shape_ = data[overalgo]["y"][::2].shape
-            speedup[algo]["y"] = np.zeros(shape=shape_)
+    ignore = ["rwlock"]
+    algos = [k for k in plotconfig.keys() if k not in ignore]
+
+    if FLAGS.print_speedup:
+        print("-----" + ds + "-----")
+        print(data["nthreads"].unique())
+        overalgo = plotconfig["unsafe"]["macrobench"]
+        for a in algos:
+            print(a)
+            try:
+                numerator = data[data["rqalg"] == plotconfig[a]["macrobench"]]        
+                numerator = numerator[yaxis]  
+                denominator = data[data["rqalg"] == overalgo]
+                denominator = denominator[yaxis]
+                newvals = numerator.values / denominator.values
+                print(newvals)
+                print("AVG: " + str(pandas.DataFrame(newvals).mean().values))
+                print("AVG (multithreaded-only): " + str(pandas.DataFrame(newvals[1:]).mean().values))
+            except:
+                print("-")
 
     x_axis_layout_["title"] = None
     x_axis_layout_["tickfont"]["size"] = 52
     y_axis_layout_["nticks"] = 6
     y_axis_layout_["tickfont"]["size"] = 52
+    y_axis_layout_["range"] = [-10, 100]
     if ylabel:
         y_axis_layout_["title"]["text"] = "Mops/s"
         y_axis_layout_["title"]["font"]["size"] = 50
@@ -615,19 +623,16 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
     )
     # legend_layout_['font']['size'] = 40
     layout_["legend"] = legend_layout_
-    layout_["width"] = 750
-    if legend:
-        layout_["height"] = 750
-    else:
-        layout_["height"] = 350
+    layout_["width"] = 550
+    layout_["height"] = 450 if legend else 400
 
     fig = go.Figure(layout=layout_)
-    for algo in plotconfig.keys():
+    for algo in algos:
         symbol_ = plotconfig[algo]["symbol"]
         line_ = {"width": 10, "color": plotconfig[algo]["color"]}
         opacity_ = 1
-        x_ = data[algo]["x"]
-        y_ = data[algo]["y"]
+        x_ = data[data["rqalg"] == plotconfig[algo]["macrobench"]][xaxis]
+        y_ = data[data["rqalg"] == plotconfig[algo]["macrobench"]][yaxis]
         marker_ = {
             "symbol": symbol_,
             "opacity": opacity_,
@@ -736,8 +741,8 @@ def main(argv):
                             (FLAGS.workloads_rqrate if u != 100 else 0),
                             nthreads,
                             ntrials,
-                            False,
-                            True,
+                            FLAGS.yaxis_titles,
+                            FLAGS.legends,
                             FLAGS.save_plots,
                             os.path.join(FLAGS.save_dir, "microbench"),
                         )
@@ -751,8 +756,8 @@ def main(argv):
                         k,
                         ntrials,
                         FLAGS.rqthreads_rqsizes,
-                        True,
-                        True,
+                        FLAGS.yaxis_titles,
+                        FLAGS.legends,
                         FLAGS.save_plots,
                         os.path.join(FLAGS.save_dir, "microbench"),
                     )
@@ -769,8 +774,8 @@ def main(argv):
                 FLAGS.rqsize_maxkey,
                 nthreads,
                 ntrials,
-                True,
-                True,
+                FLAGS.yaxis_titles,
+                FLAGS.legends,
                 FLAGS.save_plots,
                 os.path.join(FLAGS.save_dir, "microbench"),
             )
@@ -782,8 +787,8 @@ def main(argv):
         plot_macrobench(
             os.path.join(FLAGS.macrobench_dir, "rq_tpcc"),
             "SKIPLISTLOCK",
-            ylabel=True,
-            legend=True,
+            ylabel=FLAGS.yaxis_titles,
+            legend=FLAGS.legends,
             save=FLAGS.save_plots,
             save_dir=save_dir,
         )
@@ -792,8 +797,8 @@ def main(argv):
         plot_macrobench(
             os.path.join(FLAGS.macrobench_dir, "rq_tpcc"),
             "CITRUS",
-            ylabel=True,
-            legend=True,
+            ylabel=FLAGS.yaxis_titles,
+            legend=FLAGS.legends,
             save=FLAGS.save_plots,
             save_dir=save_dir,
         )

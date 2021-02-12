@@ -369,9 +369,8 @@ rlu_thread_data_t *rlu_tdata = NULL;
        << " including header=" << BUNDLE_OBJ_SIZE << endl;
 
 #elif defined(BUNDLE_SKIPLIST)
-#define BUNDLE_TYPE_DECL LinkedBundle
-#include "bundle_skiplist_impl.h"
 #include "record_manager.h"
+#include "bundle_skiplist_impl.h"
 
 #define DS_DECLARATION bundle_skiplist<test_type, test_type, MEMMGMT_T>
 #define MEMMGMT_T \

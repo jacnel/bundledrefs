@@ -24,12 +24,18 @@ plotconfig = {
         "macrobench": "RQ_RWLOCK",
     },
     "lockfree": {
-        "label": "EBR-RQ-LF",
+        "label": "EBR-RQ",
         "color": COLORS[1],
         "symbol": 0,
         "macrobench": "RQ_LOCKFREE",
     },
     "rlu": {"label": "RLU", "color": COLORS[4], "symbol": 3, "macrobench": "RQ_RLU"},
+    "unsafe": {
+        "label": "Unsafe",
+        "color": COLORS[5],
+        "symbol": 4,
+        "macrobench": "RQ_UNSAFE",
+    },
     "bundle": {
         "label": "Bundle",
         "color": COLORS[3],
@@ -40,13 +46,7 @@ plotconfig = {
         "label": "Bundle-restart",
         "color": COLORS[0],
         "symbol": 5,
-        "macrobench": "",
-    },
-    "unsafe": {
-        "label": "Unsafe",
-        "color": COLORS[5],
-        "symbol": 4,
-        "macrobench": "RQ_UNSAFE",
+        "macrobench": "RQ_RBUNDLE",
     },
     "vcas": {"label": "vCAS", "color": COLORS[6], "symbol": 6, "macrobench": None},
     "tsbundle": {
@@ -164,7 +164,7 @@ def parse_experiment_list_generate(filepath, experiment_commands):
             line = line.strip()
             if line == "" or line.startswith("#"):
                 continue
-            
+
             # Check whether this line indicates an experiment to run skip parsing the configuration if so
             if len(experiment_commands) > 0:
                 detected = False
@@ -212,7 +212,6 @@ def parse_runscript(filepath, config_list):
             else:
                 break
     return configs
-
 
 
 class CSVFile:
