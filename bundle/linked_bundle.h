@@ -63,7 +63,7 @@ template <typename NodeType>
 class LinkedBundle {
  private:
   std::atomic<BundleEntry<NodeType> *> head_;
-  BundleEntry<NodeType> *volatile tail_;
+  // BundleEntry<NodeType> *volatile tail_;
 
 #ifdef BUNDLE_DEBUG
   volatile int updates = 0;
@@ -75,18 +75,19 @@ class LinkedBundle {
   ~LinkedBundle() {
     BundleEntry<NodeType> *curr = head_;
     BundleEntry<NodeType> *next;
-    while (curr != tail_) {
+    while (curr != nullptr) {
       assert(curr != nullptr);
       next = curr->next_;
       delete curr;
       curr = next;
     }
-    delete tail_;
+    // delete tail_;
   }
 
   void init() {
-    tail_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr, nullptr);
-    head_ = tail_;
+    // tail_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr,
+    // nullptr); head_ = tail_;
+    head_ = nullptr;
   }
 
   // Inserts a new rq_bundle_node at the head of the bundle.
@@ -137,26 +138,90 @@ class LinkedBundle {
     head_.load()->ts_ = ts;
   }
 
-  // Returns a reference to the node that immediately followed at timestamp ts.
-  inline bool getPtrByTimestamp(timestamp_t ts, NodeType **next) {
-    // Start at head and work backwards until edge is found.
+  inline bool getPtr(int tid, NodeType **next) {
     BundleEntry<NodeType> *curr = head_;
-    // *next = curr->ptr_;
-    // return true;
-    // long i = 0;
-    while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP)
-      ;
-    while (curr != tail_ && curr->ts_ > ts) {
+    timestamp_t curr_ts = curr->ts_;
+    if (curr_ts != BUNDLE_PENDING_TIMESTAMP) {
+#ifdef __HANDLE_STATS
+      GSTATS_ADD(tid, bundle_first, 1);
+#endif
+      *next = curr->ptr_;
+      return true;
+    }
+
+    while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+      CPU_RELAX;
+    }
+    *next = curr->ptr_;
+    return true;
+  }
+
+  // Returns a reference to the node that immediately followed at timestamp ts.
+  inline bool getPtrByTimestamp(int tid, timestamp_t ts, NodeType **next) {
+    // Check if the first entry satisfies the timestamp.
+    BundleEntry<NodeType> *curr = head_;
+    assert(head_ != nullptr);  // An inserted node should always have an entry.
+    if (curr != nullptr) {
+      timestamp_t curr_ts = curr->ts_;
+      if (curr_ts <= ts) {
+#ifdef __HANDLE_STATS
+        GSTATS_ADD(tid, bundle_first, 1);
+#endif
+        *next = curr->ptr_;
+        return true;
+      }
+    }
+
+    // Optimization. Check the second entry in hopes that it satisfies
+    bool skip_first = false;
+    BundleEntry<NodeType> *second = curr->next_;
+    if (second != nullptr) {
+      timestamp_t second_ts = second->ts_;
+      if (second_ts == ts) {
+// Success!
+#ifdef __HANDLE_STATS
+        GSTATS_ADD(tid, bundle_second, 1);
+#endif
+        *next = second->ptr_;
+        return true;
+      } else if (second_ts > ts) {
+// Ignore the pending entry.
+#ifdef __HANDLE_STATS
+        GSTATS_ADD(tid, bundle_skip_first, 1);
+#endif
+        curr = second;
+        skip_first = true;
+      }
+    }
+
+    if (!skip_first) {
+      long long retries = 0;
+      while (curr->ts_ == BUNDLE_PENDING_TIMESTAMP) {
+        CPU_RELAX;
+        ++retries;
+      }
+
+#ifdef __HANDLE_STATS
+      GSTATS_APPEND(tid, bundle_retries, retries);
+#endif
+    }
+
+    long long traversals = 0;
+    while (curr != nullptr && curr->ts_ > ts) {
       assert(curr->ts_ != BUNDLE_NULL_TIMESTAMP);
       curr = curr->next_;
+      ++traversals;
     }
+#ifdef __HANDLE_STATS
+    GSTATS_APPEND(tid, bundle_traversals, traversals);
+#endif
 #ifdef BUNDLE_DEBUG
     if (curr->marked()) {
       std::cout << dump(0) << std::flush;
       exit(1);
     }
 #endif
-    if (curr != tail_) {
+    if (curr != nullptr) {
       *next = curr->ptr_;
       return true;
     } else {
@@ -177,7 +242,7 @@ class LinkedBundle {
     }
     SOFTWARE_BARRIER;
     BundleEntry<NodeType> *curr = pred->next_;
-    if (pred == tail_ || curr == tail_) {
+    if (pred == nullptr || curr == nullptr) {
       return;  // Nothing to do.
     }
 
@@ -185,19 +250,19 @@ class LinkedBundle {
     // newest (i.e., head). Similarly if the oldest active RQ is newer than
     // the newest entry, we can reclaim all older entries.
     if (ts == BUNDLE_NULL_TIMESTAMP || pred->ts_ <= ts) {
-      pred->next_ = tail_;
+      pred->next_ = nullptr;
     } else {
       // Traverse from head and remove nodes that are lower than ts.
-      while (curr != tail_ && curr->ts_ > ts) {
+      while (curr != nullptr && curr->ts_ > ts) {
         pred = curr;
         curr = curr->next_;
       }
-      if (curr != tail_) {
+      if (curr != nullptr) {
         // Curr points to the entry required by the oldest timestamp. This entry
         // will become the last entry in the bundle.
         pred = curr;
         curr = curr->next_;
-        pred->next_ = tail_;
+        pred->next_ = nullptr;
       }
     }
 #ifdef BUNDLE_DEBUG
@@ -206,8 +271,8 @@ class LinkedBundle {
 #endif
 
     // Reclaim nodes.
-    assert(curr != head_ && pred->next_ == tail_);
-    while (curr != tail_) {
+    assert(curr != head_ && pred->next_ == nullptr);
+    while (curr != nullptr) {
       pred = curr;
       curr = curr->next_;
       pred->mark(ts);
@@ -216,7 +281,7 @@ class LinkedBundle {
 #endif
     }
 #ifdef BUNDLE_DEBUG
-    if (curr != tail_) {
+    if (curr != nullptr) {
       std::cout << curr << std::endl;
       std::cout << dump(ts) << std::flush;
       exit(1);
@@ -228,7 +293,7 @@ class LinkedBundle {
   int size() {
     int size = 0;
     BundleEntry<NodeType> *curr = head_;
-    while (curr != tail_) {
+    while (curr != nullptr) {
 #ifdef BUNDLE_DEBUG
       if (curr->marked()) {
         std::cout << dump(0) << std::flush;
@@ -257,7 +322,7 @@ class LinkedBundle {
     // Find the number of entries in the list.
     BundleEntry<NodeType> *curr_entry = head_;
     int size = 0;
-    while (curr_entry != tail_) {
+    while (curr_entry != nullptr) {
       ++size;
       curr_entry = curr_entry->next_;
     }
@@ -269,7 +334,7 @@ class LinkedBundle {
     NodeType *ptr;
     timestamp_t ts;
     curr_entry = head_;
-    while (curr_entry != tail_) {
+    while (curr_entry != nullptr) {
       ptr = curr_entry->ptr_;
       ts = curr_entry->ts_;
       retarr[pos++] = std::pair<NodeType *, timestamp_t>(ptr, ts);
@@ -284,12 +349,12 @@ class LinkedBundle {
     std::stringstream ss;
     ss << "(ts=" << ts << ") : ";
     long i = 0;
-    while (curr != nullptr && curr != tail_) {
+    while (curr != nullptr && curr != nullptr) {
       ss << "<" << curr->ts_ << "," << curr->ptr_ << "," << curr->next_ << ">"
          << "-->";
       curr = curr->next_;
     }
-    if (curr == tail_) {
+    if (curr == nullptr) {
       ss << "(tail)<" << curr->ts_ << "," << curr->ptr_ << ","
          << reinterpret_cast<long>(curr->next_.load(std::memory_order_relaxed))
          << ">";

@@ -209,36 +209,50 @@ bool bundle_skiplist<K, V, RecManager>::contains(const int tid, K key) {
 
   while (true) {
     recmgr->leaveQuiescentState(tid, true);
-    timestamp_t ts = rqProvider->start_traversal(tid);
+
 #ifdef BUNDLE_RESTARTS
     lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
     nodeptr pred = p_preds[0];
 #else
     nodeptr pred = p_head;
 #endif
-
-    // Enter snapshot
     nodeptr curr = nullptr;
-    if (!pred->rqbundle.getPtrByTimestamp(ts, &curr)) {
-      // Failed to enter snapshot. Restart.
+
+#ifndef BUNDLE_OPTIMIZED_CONTAINS
+    // Enter snapshot
+    // SOFTWARE_BARRIER;
+    timestamp_t ts = rqProvider->start_traversal(tid);
+    if (!pred->rqbundle.getPtrByTimestamp(tid, ts, &curr)) {
+// Failed to enter snapshot. Restart.
+#ifdef __HANDLE_STATS
+      // GSTATS_ADD(tid, bundle_restarts, 1);
+#endif
       rqProvider->end_traversal(tid);
       recmgr->enterQuiescentState(tid);
       continue;
     } else {
       // Snapshot entered. Traverse using bundles.
       while (curr->key < key) {
-        bool ok = curr->rqbundle.getPtrByTimestamp(ts, &curr);
+        bool ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
         assert(ok);
       }
-      if (curr->key == key) {
-        res = true;
-      } else {
-        res = false;
-      }
-      rqProvider->end_traversal(tid);
-      recmgr->enterQuiescentState(tid);
-      return res;
     }
+#else
+    bool ok = pred->rqbundle.getPtr(tid, &curr);
+    assert(ok);
+    while (curr->key < key) {
+      ok = curr->rqbundle.getPtr(tid, &curr);
+      assert(ok);
+    }
+#endif
+    if (curr->key == key) {
+      res = true;
+    } else {
+      res = false;
+    }
+    rqProvider->end_traversal(tid);
+    recmgr->enterQuiescentState(tid);
+    return res;
   }
 }
 
@@ -354,11 +368,15 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       rqProvider->prepare_bundles(bundles, ptrs);
 
       SOFTWARE_BARRIER;
+      timestamp_t lin_time = rqProvider->get_update_lin_time(tid);
+      SOFTWARE_BARRIER;
       for (level = 0; level <= topLevel; level++) {
         p_preds[level]->p_next[level] = p_new_node;
       }
-      timestamp_t lin_time = rqProvider->linearize_update_at_write(
-          tid, &p_new_node->fullyLinked, (long long)1);
+      // timestamp_t lin_time = rqProvider->linearize_update_at_write(
+      //     tid, &p_new_node->fullyLinked, (long long)1);
+      p_new_node->fullyLinked = 1;
+      SOFTWARE_BARRIER;
       rqProvider->finalize_bundles(bundles, lin_time);
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
@@ -500,8 +518,6 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   while (true) {
     int cnt = 0;
     recmgr->leaveQuiescentState(tid, true);
-    ts = rqProvider->start_traversal(tid);
-    SOFTWARE_BARRIER;
     nodeptr pred = p_head;
     nodeptr curr = nullptr;
 #ifdef BUNDLE_RESTARTS
@@ -514,8 +530,14 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
       }
     }
 #endif
+    SOFTWARE_BARRIER;
     // Phase 2. Enter snapshot
-    if (unlikely(!pred->rqbundle.getPtrByTimestamp(ts, &curr))) {
+    ts = rqProvider->start_traversal(tid);
+    SOFTWARE_BARRIER;
+    if (unlikely(!pred->rqbundle.getPtrByTimestamp(tid, ts, &curr))) {
+#ifdef __HANDLE_STATS
+      GSTATS_ADD(tid, bundle_restarts, 1);
+#endif
       rqProvider->end_traversal(tid);
       recmgr->enterQuiescentState(tid);
       continue;
@@ -526,7 +548,7 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
       if (curr->key >= lo) {
         cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
       }
-      ok = curr->rqbundle.getPtrByTimestamp(ts, &curr);
+      ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
       assert(ok);
     }
     rqProvider->end_traversal(tid);

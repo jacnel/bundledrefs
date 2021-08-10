@@ -34,7 +34,10 @@ avgbundle=0
 expectedcount=0
 trialcount=0
 nobundlestats=0
-echo "list,max_key,u_rate,rq_rate,wrk_threads,rq_threads,rq_size,u_latency,c_latency,rq_latency,tot_thruput,u_thruput,c_thruput,rq_thruput,rq_len,avg_in_announce,avg_in_bags,reachable_nodes,avg_bundle_size" >${outfile}
+restarts=0
+avgretries=0
+avgtraversals=0
+echo "list,max_key,u_rate,rq_rate,wrk_threads,rq_threads,rq_size,u_latency,c_latency,rq_latency,tot_thruput,u_thruput,c_thruput,rq_thruput,rq_len,avg_in_announce,avg_in_bags,reachable_nodes,avg_bundle_size,tot_restarts,avg_retries,avg_traversals" >${outfile}
 for algo in ${algos}; do
   files=$(ls ${algo} | grep ${listname})
   # echo $files
@@ -91,19 +94,23 @@ for algo in ${algos}; do
     avgrqlen=$(($(echo "${filecontents}" | grep 'average length_rqs' | sed -e 's/.*=//') + ${avgrqlen}))
 
     # EBR specific statistics.
-    if [[ "${nobundlestats}" == 0 ]] && ([[ "${rqstrategy}" == "lbundle" ]] || [[ "${rqstrategy}" == "cbundle" ]]); then
+    # if [[ "${nobundlestats}" == 0 ]] && ([[ "${rqstrategy}" == "lbundle" ]] || [[ "${rqstrategy}" == "cbundle" ]]); then
       # Bundle specific statistics.
-      reachable=$(($(echo "${filecontents}" | grep 'total reachable nodes' | sed -e 's/.*: //') + ${reachable}))
-      if [[ ${reachable} != 0 ]]; then
-        avgbundle=$(echo "$(echo "${filecontents}" | grep 'average bundle size' | sed -e 's/.*: //') + ${avgbundle}" | bc)
-      fi
-    else
-      if [[ "${avgbundle}" != "0" ]]; then
-        exit 1
-      fi
+      # reachable=$(($(echo "${filecontents}" | grep 'total reachable_nodes' | sed -e 's/.*: //') + ${reachable}))
+      # if [[ ${reachable} != 0 ]]; then
+        # avgbundle=$(echo "$(echo "${filecontents}" | grep 'average bundle_size' | sed -e 's/.*: //') + ${avgbundle}" | bc)
+      # fi
+    # else
+      # if [[ "${avgbundle}" != "0" ]]; then
+      #   exit 1
+      # fi
       avgannounce=$(($(echo "${filecontents}" | grep 'average visited_in_announcements' | sed -e 's/.*=//') + ${avgannounce}))
       avgbag=$(($(echo "${filecontents}" | grep 'average visited_in_bags' | sed -e 's/.*=//') + ${avgbag}))
-    fi
+    # fi
+
+    restarts=$(($(echo "${filecontents}" | grep 'sum bundle_restarts' | sed -e 's/.*=//') + ${restarts}))
+    avgretries=$(($(echo "${filecontents}" | grep 'average bundle_retries' | sed -e 's/.*=//') + ${avgretries}))
+    avgtraversals=$(($(echo "${filecontents}" | grep 'average bundle_traversals' | sed -e 's/.*=//') + ${avgtraversals}))
 
     trialcount=$((${trialcount} + 1))
 
@@ -121,7 +128,11 @@ for algo in ${algos}; do
       printf ",%d" $((${avgannounce} / ${ntrials})) >>${outfile}
       printf ",%d" $((${avgbag} / ${ntrials})) >>${outfile}
       printf ",%d" $((${reachable} / ${ntrials})) >>${outfile}
-      printf ",%.2f\n" $(echo "scale=4;$(echo ${avgbundle}) / ${ntrials}.0" | bc) >>${outfile}
+      printf ",%.2f" $(echo "scale=4;$(echo ${avgbundle}) / ${ntrials}.0" | bc) >>${outfile}
+      printf ",%d" $((${restarts} / ${ntrials})) >>${outfile}
+      printf ",%d" $((${avgretries} / ${ntrials})) >>${outfile}
+      printf ",%d" $((${avgtraversals} / ${ntrials})) >>${outfile}
+      printf "\n" >>${outfile}
       ulat=0
       clat=0
       rqlat=0
@@ -133,6 +144,9 @@ for algo in ${algos}; do
       avgbag=0
       reachable=0
       avgbundle=0
+      restarts=0
+      avgretries=0
+      avgtraversals=0
     fi
   done
 done

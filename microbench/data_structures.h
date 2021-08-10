@@ -5,8 +5,8 @@ const test_type NO_VALUE = -1;
 const test_type KEY_MIN = numeric_limits<test_type>::min() + 1;
 const test_type KEY_MAX =
     numeric_limits<test_type>::max() -
-    1;  // must be less than max(), because the snap collector needs a reserved
-        // key larger than this!
+    1; // must be less than max(), because the snap collector needs a reserved
+       // key larger than this!
 #define KEY_PRECEEDING(key) (key - 1)
 
 #ifdef RQ_SNAPCOLLECTOR
@@ -584,6 +584,105 @@ using namespace vcas_bst_ns;
 #define PRINT_OBJ_SIZES                                          \
   cout << "sizes: node=" << (sizeof(Node<test_type, test_type>)) \
        << " descriptor=" << (sizeof(SCXRecord<test_type, test_type>)) << endl;
+
+#elif defined(VCAS_LAZYLIST)
+
+#define NVCAS_OPTIMIZATION
+
+#include "record_manager.h"
+#include "vcas_lazylist_impl.h"
+using namespace vcas_lazylist;
+
+#define DS_DECLARATION \
+  lazylist<test_type, test_type, MEMMGMT_T>
+#define MEMMGMT_T \
+  record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type> >
+#define DS_CONSTRUCTOR \
+  new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE)
+
+#define INSERT_AND_CHECK_SUCCESS \
+  ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+#define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
+#define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+#define RQ_AND_CHECK_SUCCESS(rqcnt)                              \
+  (rqcnt = ds->RQ_FUNC(tid, key, key + RQSIZE - 1, rqResultKeys, \
+                       (VALUE_TYPE *)rqResultValues))
+#define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[(rqcnt)-1]
+#define INIT_THREAD(tid) ds->initThread(tid)
+#define DEINIT_THREAD(tid) ds->deinitThread(tid)
+#define INIT_ALL
+#define DEINIT_ALL
+
+#define PRINT_OBJ_SIZES \
+  cout << "sizes: node=" << (sizeof(node_t<test_type, test_type>)) << endl;
+
+#elif defined(VCAS_SKIPLIST)
+
+#define NVCAS_OPTIMIZATION
+
+#include "record_manager.h"
+#include "vcas_skiplist_lock_impl.h"
+
+using namespace vcas_skiplist_lock;
+
+#define DS_DECLARATION skiplist<test_type, test_type, MEMMGMT_T>
+#define MEMMGMT_T                      \
+  record_manager<RECLAIM, ALLOC, POOL, \
+                 node_t<test_type, test_type> RQ_SNAPCOLLECTOR_OBJECT_TYPES>
+#define DS_CONSTRUCTOR \
+  new DS_DECLARATION(TOTAL_THREADS, KEY_MIN, KEY_MAX, NO_VALUE, glob.rngs)
+
+#define INSERT_AND_CHECK_SUCCESS \
+  ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+#define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key) != ds->NO_VALUE
+#define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+#define RQ_AND_CHECK_SUCCESS(rqcnt)                              \
+  (rqcnt = ds->RQ_FUNC(tid, key, key + RQSIZE - 1, rqResultKeys, \
+                       (VALUE_TYPE *)rqResultValues))
+#define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt - 1]
+#define INIT_THREAD(tid) ds->initThread(tid)
+#define DEINIT_THREAD(tid) ds->deinitThread(tid);
+#define INIT_ALL
+#define DEINIT_ALL
+
+#define PRINT_OBJ_SIZES                                                    \
+  cout << "sizes: node="                                                   \
+       << (sizeof(node_t<test_type, test_type>))RQ_SNAPCOLLECTOR_OBJ_SIZES \
+       << endl;
+
+#elif defined(VCAS_CITRUS)
+
+#define NVCAS_OPTIMIZATION
+
+#include "record_manager.h"
+#include "vcas_citrus_impl.h"
+
+using namespace vcas_citrus;
+
+#define DS_DECLARATION citrustree<test_type, test_type, MEMMGMT_T>
+#define MEMMGMT_T \
+  record_manager<RECLAIM, ALLOC, POOL, node_t<test_type, test_type>>
+#define DS_CONSTRUCTOR new DS_DECLARATION(MAXKEY, NO_VALUE, TOTAL_THREADS)
+
+#define INSERT_AND_CHECK_SUCCESS \
+  ds->INSERT_FUNC(tid, key, VALUE) == ds->NO_VALUE
+#define DELETE_AND_CHECK_SUCCESS ds->ERASE_FUNC(tid, key).second
+#define FIND_AND_CHECK_SUCCESS ds->FIND_FUNC(tid, key)
+#define RQ_AND_CHECK_SUCCESS(rqcnt)                             \
+  rqcnt = ds->RQ_FUNC(tid, key, key + RQSIZE - 1, rqResultKeys, \
+                      (VALUE_TYPE *)rqResultValues)
+#define RQ_GARBAGE(rqcnt) rqResultKeys[0] + rqResultKeys[rqcnt - 1]
+#define INIT_THREAD(tid) \
+  ds->initThread(tid);   \
+  urcu::registerThread(tid);
+#define DEINIT_THREAD(tid) \
+  ds->deinitThread(tid);   \
+  urcu::unregisterThread();
+#define INIT_ALL urcu::init(TOTAL_THREADS);
+#define DEINIT_ALL urcu::deinit(TOTAL_THREADS);
+
+#define PRINT_OBJ_SIZES \
+  cout << "sizes: node=" << (sizeof(node_t<test_type, test_type>)) << endl;
 #else
 #error "Failed to define a data structure"
 #endif

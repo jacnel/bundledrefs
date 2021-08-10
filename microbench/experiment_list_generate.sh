@@ -13,9 +13,11 @@ source ./supported.inc
 # ksizes="10000 100000 1000000"
 
 ## Abridged experimental configurations (for artifact evaluation)
-rqtechniques="unsafe rbundle rlu lockfree bundle"
-datastructures="skiplistlock citrus"
-ksizes="100000"
+# rqtechniques="bundle vcas"
+# datastructures="lazylist"
+rqtechniques="unsafe vcas bundle rcbundle tsrcbundle rlu lockfree"
+datastructures="lazylist skiplistlock citrus"
+ksizes="10000 1000000"
 
 prepare_exp() {
   echo 0 0 0 0 0 0 $1 prepare
@@ -26,7 +28,9 @@ run_workloads() {
   count=0
   rqsize=50
   rqrates="0 2 10 50"
+  # rqrates="2 10 50"
   urates="0 1 5 25 45 50" # 2 * rate = total update %
+  # urates="5 25 45 50" # 2 * rate = total update %
   nrq=0
   prepare_exp "workloads" >>experiment_list.txt
   for rq in $rqrates; do

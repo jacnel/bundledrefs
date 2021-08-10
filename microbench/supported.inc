@@ -4,7 +4,7 @@ g++ ../common/test_htm_support.cpp -o ../common/test_htm_support > /dev/null
 htm_error=$?
 
 datastructures="abtree bst lflist lazylist citrus skiplistlock"
-rqtechniques="snapcollector lockfree rwlock unsafe rlu bundle"
+rqtechniques="snapcollector lockfree rwlock unsafe rlu bundle vcas"
 
 if [ "$htm_error" -eq "0" ]; then
     echo "Note: HTM support detected; including HTM experiments."
@@ -17,8 +17,9 @@ check_ds_technique() {
     ## args: ds alg
     if [ "$2" == "snapcollector" ] && [ "$1" != "lflist" ] && [ "$1" != "skiplistlock" ] ; then return 1 ; fi
     if [ "$2" == "rlu" ] && [ "$1" != "lazylist" ] && [ "$1" != "citrus" ] ; then return 1 ; fi
-    if [ "$2" == "lbundle" ] && [ "$1" != "lazylist" ] && [ "$1" != "skiplistlock" ] && [ "$1" != "citrus" ] && [ "$1" != "bst" ]; then return 1 ; fi
-    if [ "$2" == "vcas" ] && [ "$1" != "bst" ] ; then return 1 ; fi
+    if [ "$2" == "bundle" ] && [ "$1" != "lazylist" ] && [ "$1" != "skiplistlock" ] && [ "$1" != "citrus" ]; then return 1 ; fi
+    if [ "$2" == "rbundle" ] && [ "$1" != "lazylist" ] && [ "$1" != "skiplistlock" ] && [ "$1" != "citrus" ]; then return 1 ; fi
+    if [ "$2" == "vcas" ] && [ "$1" != "bst" ] && [ "$1" != "lazylist" ] && [ "$1" != "skiplistlock" ] && [ "$1" != "citrus" ]; then return 1 ; fi
     return 0
 }
 export -f check_ds_technique
@@ -27,7 +28,7 @@ check_ds_size() {
     ## args: ds k
     if [ "$2" == "1000000" ] && [ "$1" != "abtree" ]  && [ "$1" != "citrus" ] && [ "$1" != "skiplistlock" ] ; then return 1 ; fi
     if [ "$2" == "100000" ] && [ "$1" != "bst" ] && [ "$1" != "citrus" ] && [ "$1" != "skiplistlock" ]  ; then return 1 ; fi
-    if [ "$2" == "10000" ] && [ "$1" != "lflist" ] && [ "$1" != "lazylist" ] && [ "$1" != "citrus" ] ; then return 1 ; fi
+    if [ "$2" == "10000" ] && [ "$1" != "lflist" ] && [ "$1" != "lazylist" ] ; then return 1 ; fi
     return 0
 }
 export -f check_ds_size

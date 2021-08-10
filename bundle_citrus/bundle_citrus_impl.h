@@ -159,15 +159,13 @@ bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
   // return find(tid, key).second;
   while (true) {
     recordmgr->leaveQuiescentState(tid, true);
-    timestamp_t ts = rqProvider->start_traversal(tid);
     readLock();
     nodeptr curr = root->child[0];
     nodeptr pred = root;
-    bool in_snapshot = false;
+    // bool in_snapshot = false;
     int child = 0;
     K ckey = curr->key;
     bool ok;
-#ifdef BUNDLE_RESTARTS
     while (curr != NULL && ckey != key) {
       pred = curr;
       if (ckey > key) {
@@ -180,30 +178,19 @@ bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
       }
       if (curr != NULL) ckey = curr->key;
     }
-#else
-    ok = pred->rqbundle[0].getPtrByTimestamp(ts, &curr);
-    assert(ok);
-    in_snapshot = true;
-    while (curr != NULL && ckey != key) {
-      pred = curr;
-      if (ckey > key) {
-        ok = pred->rqbundle[0].getPtrByTimestamp(ts, &curr);
-        assert(ok);
-      }
-      if (ckey < key) {
-        ok = pred->rqbundle[1].getPtrByTimestamp(ts, &curr);
-        assert(ok);
-      }
-      if (curr != NULL) ckey = curr->key;
-    }
-#endif
 
+#ifndef BUNDLE_OPTIMIZED_CONTAINS
     // Enter snapshot.
-    if (!in_snapshot && !pred->rqbundle[child].getPtrByTimestamp(ts, &curr)) {
+    timestamp_t ts = rqProvider->start_traversal(tid);
+    if (!pred->rqbundle[child].getPtrByTimestamp(tid, ts, &curr)) {
+#ifdef __HANDLE_STATS
+      GSTATS_ADD(tid, bundle_restarts, 1);
+#endif
       rqProvider->end_traversal(tid);
       recordmgr->enterQuiescentState(tid);
       continue;
     }
+#endif
 
     // Find key using bundles.
     if (curr != NULL)
@@ -211,11 +198,19 @@ bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
                          // pointed to by the bundle
     while (curr != NULL && ckey != key) {
       if (ckey > key) {
-        ok = curr->rqbundle[0].getPtrByTimestamp(ts, &curr);
+#ifdef BUNDLE_OPTIMIZED_CONTAINS
+        ok = curr->rqbundle[0].getPtr(tid, &curr);
+#else
+        ok = curr->rqbundle[0].getPtrByTimestamp(tid, ts, &curr);
+#endif
         assert(ok);
       }
       if (ckey < key) {
-        ok = curr->rqbundle[1].getPtrByTimestamp(ts, &curr);
+#ifdef BUNDLE_OPTIMIZED_CONTAINS
+        ok = curr->rqbundle[1].getPtr(tid, &curr);
+#else
+        ok = curr->rqbundle[1].getPtrByTimestamp(tid, ts, &curr);
+#endif
         assert(ok);
       }
       if (curr != NULL) ckey = curr->key;
@@ -517,36 +512,17 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   // Traverse tree until the root of the subtree defining the range is found.
   while (true) {
     recordmgr->leaveQuiescentState(tid, true);
-    timestamp_t ts = rqProvider->start_traversal(tid);
     nodeptr curr = root->child[0];
     nodeptr pred = curr;
     nodeptr left;
     nodeptr right;
-    int direction = -1;
+    timestamp_t ts;
+    int direction = 0;
     bool restart = false;
     bool ok;
+    // #ifdef BUNDLE_RESTARTS
     while (curr != nullptr) {
-#ifndef BUNDLE_RESTARTS
       if (curr->key >= lo && curr->key <= hi) {
-        break;
-      } else if (curr->key < lo) {
-        ok = pred->rqbundle[1].getPtrByTimestamp(ts, &curr);
-        assert(ok);
-        pred = curr;
-      } else {
-        ok = pred->rqbundle[0].getPtrByTimestamp(ts, &curr);
-        assert(ok);
-        pred = curr;
-      }
-    }
-#else
-      if (curr->key >= lo && curr->key <= hi) {
-        // Phase 2. Enter snapshot.
-        if (unlikely(!pred->rqbundle[direction].getPtrByTimestamp(ts, &curr))) {
-          // A concurrent update may have inserted a new node immediately
-          // preceding the range and we must start over.
-          restart = true;
-        }
         break;
       } else if (curr->key < lo) {
         // Phase 1. Search right subtree.
@@ -560,10 +536,34 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
         direction = 0;
       }
     }
-    if (restart) {
+    // #endif
+
+    // Phase 2. Enter snapshot.
+    ts = rqProvider->start_traversal(tid);
+    if (unlikely(
+            !pred->rqbundle[direction].getPtrByTimestamp(tid, ts, &curr))) {
+      // A concurrent update may have inserted a new node immediately
+      // preceding the range and we must start over.
+#ifdef __HANDLE_STATE
+      GSTATS_ADD(tid, bundle_restarts, 1);
+#endif
       continue;
     }
-#endif
+
+    // Phase 3. Enter range.
+    while (curr != nullptr) {
+      if (curr->key >= lo && curr->key <= hi) {
+        break;
+      } else if (curr->key < lo) {
+        ok = pred->rqbundle[1].getPtrByTimestamp(tid, ts, &curr);
+        assert(ok);
+        pred = curr;
+      } else {
+        ok = pred->rqbundle[0].getPtrByTimestamp(tid, ts, &curr);
+        assert(ok);
+        pred = curr;
+      }
+    }
 
     // If curr is not `nullptr` then the range is contained in the subtree
     // rooted at this node.
@@ -584,9 +584,9 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                       &size, lo, hi);
 
         // Explore subtrees with DFS based on timestamp and range.
-        ok = node->rqbundle[0].getPtrByTimestamp(ts, &left);
+        ok = node->rqbundle[0].getPtrByTimestamp(tid, ts, &left);
         assert(ok);
-        ok = node->rqbundle[1].getPtrByTimestamp(ts, &right);
+        ok = node->rqbundle[1].getPtrByTimestamp(tid, ts, &right);
         assert(ok);
         if (left != nullptr && lo < node->key) {
           stack.push(left);

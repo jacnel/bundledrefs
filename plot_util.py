@@ -24,12 +24,13 @@ plotconfig = {
         "macrobench": "RQ_RWLOCK",
     },
     "lockfree": {
-        "label": "EBR-RQ",
+        "label": "EBR-RQ-LF",
         "color": COLORS[1],
         "symbol": 0,
         "macrobench": "RQ_LOCKFREE",
     },
     "rlu": {"label": "RLU", "color": COLORS[4], "symbol": 3, "macrobench": "RQ_RLU"},
+    "vcas": {"label": "vCAS", "color": COLORS[6], "symbol": 1, "macrobench": None},
     "unsafe": {
         "label": "Unsafe",
         "color": COLORS[5],
@@ -43,16 +44,27 @@ plotconfig = {
         "macrobench": "RQ_BUNDLE",
     },
     "rbundle": {
-        "label": "Bundle-restart",
+        "label": "Bundle (r)",
         "color": COLORS[0],
         "symbol": 5,
         "macrobench": "RQ_RBUNDLE",
     },
-    "vcas": {"label": "vCAS", "color": COLORS[6], "symbol": 6, "macrobench": None},
-    "tsbundle": {
-        "label": "Bundle-rqts",
+    "rcbundle": {
+        "label": "Bundle (r+c)",
+        "color": COLORS[0],
+        "symbol": 6,
+        "macrobench": "",
+    },
+    "tsrbundle": {
+        "label": "Bundle (r+ts)",
         "color": COLORS[8],
         "symbol": 7,
+        "macrobench": "",
+    },
+    "tsrcbundle": {
+        "label": "Bundle (r+c+ts)",
+        "color": COLORS[9],
+        "symbol": 8,
         "macrobench": "",
     },
 }

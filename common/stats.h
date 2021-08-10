@@ -95,7 +95,7 @@ namespace stats_ns {
     #endif
     #define STATS_THREAD_PADDING_BYTES 256
     #define MAX_NUM_STATS 128
-    #define MAX_THREAD_BUF_SIZE (1<<20)
+    #define MAX_THREAD_BUF_SIZE (1<<21)
     #define DATA_SIZE_BYTES 8
     #define BITS_IN_BYTE 8
     #define DEFAULT_HISTOGRAM_LIN_NUM_BUCKETS 32

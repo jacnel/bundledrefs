@@ -23,19 +23,20 @@
 #elif defined BUNDLE_UNSAFE_BUNDLE
 #define BUNDLE_UNSAFE
 #define BUNDLE_TYPE_DECL LinkedBundle
-#include "unsafe_linked_bundle.h"
+#include "linked_bundle.h"
 #else
 #error NO BUNDLE TYPE DEFINED
 #endif
 
 #include "common_bundle.h"
 
+thread_local int _backoff = 0;
+
 #define __THREAD_DATA_SIZE 1024
 // Used to announce an active range query and its linearization point.
 union __rq_thread_data {
   struct {
     volatile timestamp_t rq_lin_time;
-    volatile char pad0[PREFETCH_SIZE_BYTES];
     std::atomic<bool> rq_flag;
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
     volatile char pad1[PREFETCH_SIZE_BYTES];
@@ -59,14 +60,16 @@ template <typename K, typename V, typename NodeType, typename DataStructure,
           bool canRetireNodesLogicallyDeletedByOtherProcesses>
 class RQProvider {
  private:
-  // Timestamp used by range queries to linearize accesses.
-  std::atomic<timestamp_t> curr_timestamp_;
-  volatile char pad0[PREFETCH_SIZE_BYTES];
-  // Array of RQ announcements. One per thread.
-  __rq_thread_data *rq_thread_data_;
-  volatile char pad1[PREFETCH_SIZE_BYTES];
   // Number of processes concurrently operating on the data structure.
   const int num_processes_;
+  volatile char pad0[PREFETCH_SIZE_BYTES];
+  // Timestamp used by range queries to linearize accesses.
+  std::atomic<timestamp_t> curr_timestamp_;
+  volatile char pad1[PREFETCH_SIZE_BYTES];
+
+  // Array of RQ announcements. One per thread.
+  __rq_thread_data *rq_thread_data_;
+  volatile char pad2[PREFETCH_SIZE_BYTES];
 
   DataStructure *ds_;
   RecordManager *const recmgr_;
@@ -144,6 +147,33 @@ class RQProvider {
       init_[tid] = !init_[tid];
   }
 
+  inline void backoff(int amount) {
+    if (amount == 0) return;
+    volatile long long sum = 0;
+    int limit = amount;
+    for (int i = 0; i < limit; i++) sum += i;
+  }
+
+  inline long long getNextTS(const int tid) {
+    // return __sync_fetch_and_add(&timestamp, 1);
+    timestamp_t ts = curr_timestamp_.load(std::memory_order_seq_cst);
+    backoff(_backoff);
+    if (ts == curr_timestamp_.load(std::memory_order_seq_cst)) {
+      if (curr_timestamp_.fetch_add(1, std::memory_order_release) == ts)
+        _backoff /= 2;
+      else
+        _backoff *= 2;
+    }
+    if (_backoff < 1) _backoff = 1;
+    if (_backoff > 512) _backoff = 512;
+      // else backoff_amount /= 2;
+
+#if defined(VCAS_STATS)
+      // nodesSeen.clear();
+#endif
+    return ts + 1;
+  }
+
   inline void init_node(int tid, NodeType *const node) {}
 
   // for each address addr that is modified by rq_linearize_update_at_write
@@ -168,7 +198,7 @@ class RQProvider {
 
   // Creates a snapshot of the current state of active RQs.
   inline timestamp_t get_oldest_active_rq() {
-    timestamp_t oldest_active = curr_timestamp_;
+    timestamp_t oldest_active = curr_timestamp_.load(std::memory_order_relaxed);
     timestamp_t curr_rq;
     for (int i = 0; i < num_processes_; ++i) {
       while (rq_thread_data_[i].data.rq_flag == true)
@@ -197,11 +227,9 @@ class RQProvider {
   // Atomically increments the global timestamp and returns the new value to the
   // caller.
   inline timestamp_t get_update_lin_time(int tid) {
-#ifdef BUNDLE_RQ_TS
-    return curr_timestamp_;
-#endif
-
-#ifndef BUNDLE_UNSAFE_BUNDLE
+#ifdef BUNDLE_RQTS
+    return curr_timestamp_.load(std::memory_order_acquire);
+#elif defined(BUNDLE_UNSAFE_BUNDLE)
 #ifdef BUNDLE_TIMESTAMP_RELAXATION
     if (((rq_thread_data_[tid].data.local_timestamp + 1) %
          BUNDLE_TIMESTAMP_RELAXATION) == 0) {
@@ -213,55 +241,62 @@ class RQProvider {
     }
 // #elif defined(BUNDLE_UPDATE_USES_CAS)
 #else
+    return BUNDLE_MIN_TIMESTAMP;
+#endif
+#else
     // timestamp_t ts = curr_timestamp_;
     // if (curr_timestamp_.compare_exchange_strong(ts, ts + 1)) {
     //   return ts + 1;
     // } else {
     //   return ts;
     // }
-    return curr_timestamp_.fetch_add(1) + 1;
-    // return curr_timestamp_;
-#endif
-    // return curr_timestamp_;
-#else
-    return BUNDLE_MIN_TIMESTAMP;
+    // return curr_timestamp_.fetch_add(1, std::memory_order_relaxed) + 1;
+    timestamp_t ts = getNextTS(tid);
+    return ts;
 #endif
 #endif
+  }
+
+  inline timestamp_t get_curr_timestamp(int tid) {
+    return curr_timestamp_.load(std::memory_order_seq_cst);
   }
 
   // Write the range query linearization time so updates do not recycle any
   // edges needed by this range query.
   inline timestamp_t start_traversal(int tid) {
-#ifdef BUNDLE_RQTS
+#if defined(BUNDLE_RQTS)
+// Reads drive timestamp.
 #if defined(BUNDLE_UPDATE_USES_CAS)
     timestamp_t ts = curr_timestamp_;
     curr_timestamp_.compare_exchange_strong(ts, ts + 1);
     return ts;
 #else
-    return curr_timestamp_.fetch_add(1);
+    rq_thread_data_[tid].data.rq_flag.store(true, std::memory_order_acquire);
+    rq_thread_data_[tid].data.rq_lin_time = getNextTS(tid) - 1;
+    rq_thread_data_[tid].data.rq_flag.store(false, std::memory_order_release);
+    return rq_thread_data_[tid].data.rq_lin_time;
+    // return getNextTS(tid) - 1;
 #endif
-#endif
-
-#ifndef BUNDLE_UNSAFE_BUNDLE
-    // rq_thread_data_[tid].data.rq_flag = true;
-    // rq_thread_data_[tid].data.rq_lin_time = curr_timestamp_;
-    // rq_thread_data_[tid].data.rq_flag = false;
-    // return rq_thread_data_[tid].data.rq_lin_time;
-    return curr_timestamp_;
-    // return BUNDLE_MAX_TIMESTAMP;
-#elif defined(BUNDLE_TIMESTAMP_RELAXATION)
-
+#elif defined(BUNDLE_UNSAFE_BUNDLE)
+// Bundle is updated periodically or
+#if defined(BUNDLE_TIMESTAMP_RELAXATION)
   ++rq_thread_data_[tid].data.local_timestamp;
   if (((rq_thread_data_[tid].data.local_timestamp + 1) %
        BUNDLE_TIMESTAMP_RELAXATION) == 0) {
     rq_thread_data_[tid].data.local_timestamp = curr_timestamp_;
     return rq_thread_data_[tid].data.local_timestamp;
   } else {
-    return rq_thread_data_[tid].data.local_timestamp /
+    return rq_thread_data_[tid].data.local_timestamp;
   }
   // #elif defined(BUNDLE_UPDATE_USES_CAS)
 #else
   return BUNDLE_MIN_TIMESTAMP;
+#endif
+#else
+  rq_thread_data_[tid].data.rq_flag.store(true, std::memory_order_acquire);
+  rq_thread_data_[tid].data.rq_lin_time = curr_timestamp_;
+  rq_thread_data_[tid].data.rq_flag.store(false, std::memory_order_release);
+  return rq_thread_data_[tid].data.rq_lin_time;
 #endif
   }
 
@@ -295,7 +330,7 @@ class RQProvider {
   // edge we needed.
   inline void end_traversal(int tid) {
 #ifndef BUNDLE_UNSAFE_BUNDLE
-    // rq_thread_data_[tid].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
+    rq_thread_data_[tid].data.rq_lin_time = BUNDLE_NULL_TIMESTAMP;
 #endif
   }
 

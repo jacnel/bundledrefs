@@ -121,6 +121,7 @@ def plot_workload(
     if ds == "skiplistlock":
         ignore.append("bundle")
     algos = [k for k in plotconfig.keys() if k not in ignore]
+    print("Algos: " + str(algos))
 
     # Read in data for each algorithm
     count = 0
@@ -746,7 +747,6 @@ def main(argv):
                             FLAGS.save_plots,
                             os.path.join(FLAGS.save_dir, "microbench"),
                         )
-                        pass
 
                 if "run_rq_threads" in experiments:
                     print("Plotting rq_threads")

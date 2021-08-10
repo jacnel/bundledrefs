@@ -37,7 +37,9 @@
       (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_RBUNDLE) || \
       (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE) || \
       (INDEX_STRUCT == IDX_CITRUS_RQ_RBUNDLE) || \
-      (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE)
+      (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE) || \
+      (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_VCAS) || \
+      (INDEX_STRUCT == IDX_CITRUS_RQ_VCAS)
 #include "index_with_rq.h"
 #elif (INDEX_STRUCT == IDX_BTREE)
 #include "index_btree.h"

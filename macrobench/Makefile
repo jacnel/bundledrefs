@@ -66,11 +66,21 @@ INCLUDE += -I../rlu_linked_list
 INCLUDE += -I../skiplist_lock
 INCLUDE += -I../rq
 INCLUDE += -I../rq/snapcollector
+
+# Bundle specific flags
+# ---------------------
 INCLUDE += -I../bundle
 INCLUDE += -I../bundle_skiplist_lock
 INCLUDE += -I../bundle_citrus
-INCLUDE += -I../unsafe/citrus
-INCLUDE += -I../unsafe/skiplist_lock
+
+# vCAS specific flags
+INCLUDE += -I../vcas_bst
+INCLUDE += -I../vcas_skiplist_lock
+INCLUDE += -I../vcas_citrus
+
+# ---------------------
+# INCLUDE += -I../unsafe/citrus
+# INCLUDE += -I../unsafe/skiplist_lock
 
 #CFLAGS += -DSKIP_PERMUTATIONS
 CFLAGS += $(INCLUDE) -DNOGRAPHITE=1 -O3 -DINDEX_STRUCT=IDX_$(dict) -DWORKLOAD=$(workload) #-Werror
