@@ -41,7 +41,9 @@
 // [PART_ALLOC]
 #define PART_ALLOC false
 #define MEM_SIZE (1UL << 30)
+#ifndef NO_FREE
 #define NO_FREE true
+#endif
 
 /***********************************************/
 // Concurrency Control

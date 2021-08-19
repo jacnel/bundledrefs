@@ -179,38 +179,17 @@ bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
       if (curr != NULL) ckey = curr->key;
     }
 
-#ifndef BUNDLE_OPTIMIZED_CONTAINS
-    // Enter snapshot.
-    timestamp_t ts = rqProvider->start_traversal(tid);
-    if (!pred->rqbundle[child].getPtrByTimestamp(tid, ts, &curr)) {
-#ifdef __HANDLE_STATS
-      GSTATS_ADD(tid, bundle_restarts, 1);
-#endif
-      rqProvider->end_traversal(tid);
-      recordmgr->enterQuiescentState(tid);
-      continue;
-    }
-#endif
-
     // Find key using bundles.
     if (curr != NULL)
       ckey = curr->key;  // Necessary because previous ckey may not reflect node
                          // pointed to by the bundle
     while (curr != NULL && ckey != key) {
       if (ckey > key) {
-#ifdef BUNDLE_OPTIMIZED_CONTAINS
         ok = curr->rqbundle[0].getPtr(tid, &curr);
-#else
-        ok = curr->rqbundle[0].getPtrByTimestamp(tid, ts, &curr);
-#endif
         assert(ok);
       }
       if (ckey < key) {
-#ifdef BUNDLE_OPTIMIZED_CONTAINS
         ok = curr->rqbundle[1].getPtr(tid, &curr);
-#else
-        ok = curr->rqbundle[1].getPtrByTimestamp(tid, ts, &curr);
-#endif
         assert(ok);
       }
       if (curr != NULL) ckey = curr->key;
@@ -520,7 +499,6 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     int direction = 0;
     bool restart = false;
     bool ok;
-    // #ifdef BUNDLE_RESTARTS
     while (curr != nullptr) {
       if (curr->key >= lo && curr->key <= hi) {
         break;
@@ -536,7 +514,6 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
         direction = 0;
       }
     }
-    // #endif
 
     // Phase 2. Enter snapshot.
     ts = rqProvider->start_traversal(tid);

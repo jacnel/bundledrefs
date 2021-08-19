@@ -30,6 +30,7 @@ rm -f warnings.txt
 if [ "$#" -eq "1" ]; then
   testingmode=1
   millis=1
+  trials=1
   prefill_and_time="-t ${millis}"
 else
   testingmode=0

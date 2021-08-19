@@ -21,7 +21,7 @@
  * Authors Maya Arbel and Adam Morrison
  * Converted into a class and implemented as a 3-path algorithm by Trevor Brown
  */
-
+#pragma once
 #ifndef _DICTIONARY_H_
 #define _DICTIONARY_H_
 

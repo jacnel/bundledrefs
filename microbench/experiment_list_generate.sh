@@ -8,15 +8,10 @@ source ./supported.inc
 ## Overwrite datastructures and rqtechniques from 'supported.inc'
 
 ## Full experimental configurations.
-# rqtechniques="lockfree rwlock unsafe rlu lbundle"
-# datastructures="lazylist skiplistlock citrus"
-# ksizes="10000 100000 1000000"
-
-## Abridged experimental configurations (for artifact evaluation)
-# rqtechniques="bundle vcas"
-# datastructures="lazylist"
-rqtechniques="unsafe vcas bundle rcbundle tsrcbundle rlu lockfree"
-datastructures="lazylist skiplistlock citrus"
+rqtechniques="unsafe vcas rlu bundle tsbundle lockfree"
+datastructures="skiplistlock citrus"
+# rqtechniques="bundle tsbundle"
+# datastructures="skiplistlock"
 ksizes="10000 1000000"
 
 prepare_exp() {
@@ -27,10 +22,8 @@ run_workloads() {
   echo "Preparing workloads: THROUGHPUT WHILE VARYING WORKLOAD DISTRIBUTION"
   count=0
   rqsize=50
-  rqrates="0 2 10 50"
-  # rqrates="2 10 50"
-  urates="0 1 5 25 45 50" # 2 * rate = total update %
-  # urates="5 25 45 50" # 2 * rate = total update %
+  rqrates="10"
+  urates="5 45" # 2 * rate = total update %
   nrq=0
   prepare_exp "workloads" >>experiment_list.txt
   for rq in $rqrates; do
@@ -121,6 +114,6 @@ run_rq_threads() {
 #< Indicates the plotting script should detect this line as an experiment to plot
 run_workloads #<
 # run_rq_sizes #<
-run_rq_threads #<
+# run_rq_threads #<
 
 echo "Total experiment lines generated:" $(cat experiment_list.txt | wc -l)

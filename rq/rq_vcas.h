@@ -3,7 +3,6 @@
 #define RQ_VCAS_H
 
 #include "rq_debugging.h"
-#include "myrand.h"
 #include <rwlock.h>
 #include <pthread.h>
 #include <atomic>
@@ -16,7 +15,7 @@
 #define CAS(addr, expected_value, new_value) \
   __sync_bool_compare_and_swap((addr), (expected_value), (new_value))
 
-thread_local int _backoff = 1;
+static thread_local int backoff_amt = 1;
 
 #ifdef NVCAS_OPTIMIZATION
 // Encodes a vCAS object
@@ -73,18 +72,18 @@ class RQProvider {
   inline long long takeSnapshot(const int tid) {
     // return __sync_fetch_and_add(&timestamp, 1);
     long long ts = timestamp;
-    backoff(_backoff);
+    backoff(backoff_amt);
     std::atomic_thread_fence(std::memory_order_seq_cst);
     if (ts == timestamp) {
       // if(CAS(&timestamp, ts, ts+1))
       if (__sync_fetch_and_add(&timestamp, 1) == ts)
-        _backoff /= 2;
+        backoff_amt /= 2;
       else
-        _backoff *= 2;
+        backoff_amt *= 2;
     } else {
     }
-    if (_backoff < 1) _backoff = 1;
-    if (_backoff > 512) _backoff = 512;
+    if (backoff_amt < 1) backoff_amt = 1;
+    if (backoff_amt > 512) backoff_amt = 512;
       // else backoff_amount /= 2;
 
 #if defined(VCAS_STATS)

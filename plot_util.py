@@ -4,9 +4,9 @@ import subprocess
 
 # General configuration.
 COLORS = [
-    "rgb(255,255,106)",
-    "rgb(31,120,180)",
-    "rgb(178,223,138)",
+    "rgb(255,255,106)", # Yellow
+    "rgb(31,120,180)", # Blue
+    "rgb(178,223,138)", # 
     "rgb(51,160,44)",
     "rgb(251,154,153)",
     "rgb(207,233,252)",
@@ -17,56 +17,50 @@ COLORS = [
 ]
 
 plotconfig = {
-    "rwlock": {
-        "label": "EBR-RQ",
-        "color": COLORS[7],
-        "symbol": 1,
-        "macrobench": "RQ_RWLOCK",
-    },
+    # "rwlock": {
+    #     "label": "EBR-RQ",
+    #     "color": COLORS[7],
+    #     "symbol": 1,
+    #     "macrobench": "RQ_RWLOCK",
+    # },
     "lockfree": {
-        "label": "EBR-RQ-LF",
+        "label": "EBR-RQ",
         "color": COLORS[1],
         "symbol": 0,
         "macrobench": "RQ_LOCKFREE",
     },
+    "vcas": {"label": "vCAS", "color": COLORS[2], "symbol": 6, "macrobench": "RQ_VCAS"},
     "rlu": {"label": "RLU", "color": COLORS[4], "symbol": 3, "macrobench": "RQ_RLU"},
-    "vcas": {"label": "vCAS", "color": COLORS[6], "symbol": 1, "macrobench": None},
     "unsafe": {
         "label": "Unsafe",
         "color": COLORS[5],
         "symbol": 4,
         "macrobench": "RQ_UNSAFE",
     },
+    "tsbundle": {
+        "label": "Bundle-RQ",
+        "color": COLORS[3],
+        "symbol": 1,
+        "macrobench": "",
+    },
     "bundle": {
         "label": "Bundle",
-        "color": COLORS[3],
-        "symbol": 2,
-        "macrobench": "RQ_BUNDLE",
-    },
-    "rbundle": {
-        "label": "Bundle (r)",
         "color": COLORS[0],
-        "symbol": 5,
+        "symbol": 2,
         "macrobench": "RQ_RBUNDLE",
     },
-    "rcbundle": {
-        "label": "Bundle (r+c)",
-        "color": COLORS[0],
-        "symbol": 6,
-        "macrobench": "",
-    },
-    "tsrbundle": {
-        "label": "Bundle (r+ts)",
-        "color": COLORS[8],
-        "symbol": 7,
-        "macrobench": "",
-    },
-    "tsrcbundle": {
-        "label": "Bundle (r+c+ts)",
-        "color": COLORS[9],
-        "symbol": 8,
-        "macrobench": "",
-    },
+    # "rbundle": {
+    #     "label": "Bundle (r)",
+    #     "color": COLORS[0],
+    #     "symbol": 5,
+    #     "macrobench": "RQ_RBUNDLE",
+    # },
+    # "rcbundle": {
+    #     "label": "Bundle (r+c)",
+    #     "color": COLORS[0],
+    #     "symbol": 6,
+    #     "macrobench": "",
+    # },
 }
 
 

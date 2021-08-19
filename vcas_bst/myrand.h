@@ -1,7 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-namespace myrand {
+namespace my_rand {
   thread_local static unsigned long x=123456789, y=362436069, z=521288629;
 
   unsigned long get_rand(void) {          //period 2^96-1

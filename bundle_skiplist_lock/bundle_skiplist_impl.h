@@ -204,49 +204,28 @@ bool bundle_skiplist<K, V, RecManager>::contains(const int tid, K key) {
       0,
   };
   nodeptr p_found = NULL;
+  nodeptr pred;
+  nodeptr curr;
   int lFound;
   bool res;
 
   while (true) {
     recmgr->leaveQuiescentState(tid, true);
-
-#ifdef BUNDLE_RESTARTS
     lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
-    nodeptr pred = p_preds[0];
-#else
-    nodeptr pred = p_head;
-#endif
-    nodeptr curr = nullptr;
 
-#ifndef BUNDLE_OPTIMIZED_CONTAINS
-    // Enter snapshot
-    // SOFTWARE_BARRIER;
-    timestamp_t ts = rqProvider->start_traversal(tid);
-    if (!pred->rqbundle.getPtrByTimestamp(tid, ts, &curr)) {
-// Failed to enter snapshot. Restart.
-#ifdef __HANDLE_STATS
-      // GSTATS_ADD(tid, bundle_restarts, 1);
-#endif
-      rqProvider->end_traversal(tid);
-      recmgr->enterQuiescentState(tid);
-      continue;
-    } else {
-      // Snapshot entered. Traverse using bundles.
+    if (lFound >= 0) {
+      pred = p_preds[lFound];
+      bool ok = pred->rqbundle.getPtr(tid, &curr);
+      assert(ok);
       while (curr->key < key) {
-        bool ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
+        ok = curr->rqbundle.getPtr(tid, &curr);
         assert(ok);
       }
-    }
-#else
-    bool ok = pred->rqbundle.getPtr(tid, &curr);
-    assert(ok);
-    while (curr->key < key) {
-      ok = curr->rqbundle.getPtr(tid, &curr);
-      assert(ok);
-    }
-#endif
-    if (curr->key == key) {
-      res = true;
+      if (curr->key == key) {
+        res = true;
+      } else {
+        res = false;
+      }
     } else {
       res = false;
     }
@@ -520,7 +499,6 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     recmgr->leaveQuiescentState(tid, true);
     nodeptr pred = p_head;
     nodeptr curr = nullptr;
-#ifdef BUNDLE_RESTARTS
     // Phase 1. Pre-range traversal
     for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];
@@ -529,11 +507,9 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
         curr = curr->p_next[level];
       }
     }
-#endif
-    SOFTWARE_BARRIER;
+
     // Phase 2. Enter snapshot
     ts = rqProvider->start_traversal(tid);
-    SOFTWARE_BARRIER;
     if (unlikely(!pred->rqbundle.getPtrByTimestamp(tid, ts, &curr))) {
 #ifdef __HANDLE_STATS
       GSTATS_ADD(tid, bundle_restarts, 1);

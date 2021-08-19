@@ -5,6 +5,7 @@
 // Brown. Updates are responsible for calling the required APIs to prepare and
 // finalize the bundles.
 
+#pragma once
 #ifndef BUNDLE_RQ_BUNDLE_H
 #define BUNDLE_RQ_BUNDLE_H
 
@@ -30,7 +31,7 @@
 
 #include "common_bundle.h"
 
-thread_local int _backoff = 0;
+static thread_local int backoff_amt = 0;
 
 #define __THREAD_DATA_SIZE 1024
 // Used to announce an active range query and its linearization point.
@@ -157,16 +158,15 @@ class RQProvider {
   inline long long getNextTS(const int tid) {
     // return __sync_fetch_and_add(&timestamp, 1);
     timestamp_t ts = curr_timestamp_.load(std::memory_order_seq_cst);
-    backoff(_backoff);
+    backoff(backoff_amt);
     if (ts == curr_timestamp_.load(std::memory_order_seq_cst)) {
       if (curr_timestamp_.fetch_add(1, std::memory_order_release) == ts)
-        _backoff /= 2;
+        backoff_amt /= 2;
       else
-        _backoff *= 2;
+        backoff_amt *= 2;
     }
-    if (_backoff < 1) _backoff = 1;
-    if (_backoff > 512) _backoff = 512;
-      // else backoff_amount /= 2;
+    if (backoff_amt < 1) backoff_amt = 1;
+    if (backoff_amt > 512) backoff_amt = 512;
 
 #if defined(VCAS_STATS)
       // nodesSeen.clear();

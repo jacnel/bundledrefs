@@ -158,37 +158,17 @@ bool bundle_lazylist<K, V, RecManager>::contains(const int tid, const K &key) {
     nodeptr curr = head;
     nodeptr pred = curr;
 
-#ifdef BUNDLE_RESTARTS
     while (curr->key < key) {
       pred = curr;
       curr = curr->next;
     }
-#endif
 
-#ifndef BUNDLE_OPTIMIZED_CONTAINS
-    // Enter snapshot.
-    timestamp_t ts = rqProvider->start_traversal(tid);
-    if (!pred->rqbundle.getPtrByTimestamp(tid, ts, &curr)) {
-#ifdef __HANDLE_STATS
-      GSTATS_ADD(tid, bundle_restarts, 1);
-#endif
-      rqProvider->end_traversal(tid);
-      recordmgr->enterQuiescentState(tid);
-      continue;
-    }
-#else
     ok = pred->rqbundle.getPtr(tid, &curr);
     assert(ok);
-#endif
 
     while (curr->key < key) {
-#ifdef BUNDLE_OPTIMIZED_CONTAINS
       ok = curr->rqbundle.getPtr(tid, &curr);
       assert(ok);
-#else
-      ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
-      assert(ok);
-#endif
     }
 
     V res = NO_VALUE;
@@ -345,33 +325,23 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K &lo,
   for (;;) {
     recordmgr->leaveQuiescentState(tid, true);
 
-    // Read gloabl timestamp and announce self.
-    ts = rqProvider->start_traversal(tid);
+    // Phase 1. Traverse to node immediately preceding range.
     nodeptr curr = head;
     nodeptr pred = curr;
-
-#ifdef BUNDLE_RESTARTS
-    // Phase 1. Traverse to node immediately preceding range.
     while (curr != nullptr && curr->key < lo) {
       pred = curr;
       curr = curr->next;
     }
     assert(curr != nullptr);
-#endif
 
     // Phase 2. Enter range using bundles.
-#ifdef BUNDLE_RESTARTS
-    nodeptr entry;
-    nodeptr first;
+    ts = rqProvider->start_traversal(tid);
     if (!enterSnapshot(tid, pred, ts, &curr)) {
       // If entering the range fails, then restart.
       rqProvider->end_traversal(tid);
       recordmgr->enterQuiescentState(tid);
       continue;
     }
-    entry = pred;
-    first = curr;
-#endif
 
     // Phase 3. Range collect.
     while (curr != nullptr && curr->key <= hi) {

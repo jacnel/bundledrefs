@@ -175,7 +175,9 @@ typedef bundle_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_VCAS)
 #define RQ_VCAS
-#include "vcas_skiplist_impl.h"
+#define NVCAS_OPTIMIZATION
+#include "vcas_skiplist_lock_impl.h"
+using namespace vcas_skiplist_lock;
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
 typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
@@ -243,7 +245,9 @@ typedef bundle_citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_VCAS)
 #define RQ_VCAS
+#define NVCAS_OPTIMIZATION
 #include "vcas_citrus_impl.h"
+using namespace vcas_citrus;
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
 typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
@@ -417,7 +421,8 @@ class index_with_rq : public index_base {
     (INDEX_STRUCT == IDX_CITRUS_RQ_RWLOCK) ||     \
     (INDEX_STRUCT == IDX_CITRUS_RQ_HTM_RWLOCK) || \
     (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE) ||     \
-    (INDEX_STRUCT == IDX_CITRUS_RQ_RLU)
+    (INDEX_STRUCT == IDX_CITRUS_RQ_RLU) || \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_VCAS)
     const void *oldVal = (VALUE_TYPE)index->erase(tid, key).first;
 #else
     const void *oldVal = index->erase(tid, key);

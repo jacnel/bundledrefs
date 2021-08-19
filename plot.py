@@ -118,10 +118,7 @@ def plot_workload(
 
     # Ignores rows in .csv with the following label
     ignore = ["ubundle"]
-    if ds == "skiplistlock":
-        ignore.append("bundle")
     algos = [k for k in plotconfig.keys() if k not in ignore]
-    print("Algos: " + str(algos))
 
     # Read in data for each algorithm
     count = 0
@@ -149,7 +146,7 @@ def plot_workload(
     )
     layout_["legend"] = legend_layout_
     layout_["autosize"] = False
-    layout_["width"] = 1250 if legend else 550
+    layout_["width"] = 1250 if legend else 560
     layout_["height"] = 450
 
     fig = go.Figure(layout=layout_)
@@ -159,10 +156,10 @@ def plot_workload(
         marker_ = {
             "symbol": symbol_,
             "color": color_,
-            "size": 40,
+            "size": 25,
             "line": {"width": (2 if legend else 5), "color": "black"},
         }
-        line_ = {"width": 10}
+        line_ = {"width": 7}
         name_ = "<b>" + plotconfig[a]["label"] + "</b>"
         y_ = data[data["list"] == ds + "-" + a]
         y_ = y_[y_.wrk_threads.isin(threads)]["tot_thruput"]
@@ -188,12 +185,12 @@ def plot_workload(
 
     # Print speedup for paper.
     if FLAGS.print_speedup:
-        ignore = ["ubundle", "vcas"]
-        overalgo = "unsafe"
+        ignore = ["ubundle"]
+        overalgo = "rlu"
         overalgos = [
             k for k in plotconfig.keys() if (k not in ignore and k != overalgo)
         ]
-        print('Speedup over "unsafe" for ' + ds + " @ " + str(u_rate) + "% updates\n")
+        print('Speedup over "' + overalgo + '" for ' + ds + " @ " + str(u_rate) + "% updates\n")
         threads_printed = False
         for o in overalgos:
             o_name = ds + "-" + o
@@ -490,7 +487,7 @@ def plot_rq_threads(
     )
     layout_["legend"] = legend_layout_
     layout_["autosize"] = False
-    layout_["width"] = 1250
+    layout_["width"] = 1260
     layout_["height"] = 450
 
     # fig = go.Figure(layout=layout_)
@@ -536,10 +533,10 @@ def plot_rq_threads(
             marker_ = {
                 "symbol": symbol_,
                 "color": color_,
-                "size": 40,
+                "size": 25,
                 "line": {"width": 5, "color": "black"},
             }
-            line_ = {"width": 10}
+            line_ = {"width": 7}
             name_ = "<b>" + plotconfig[a]["label"] + "</b>"
             x_ = rqsizes
             y_ = data[data["list"] == ds + "-" + a]
@@ -613,7 +610,7 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
     x_axis_layout_["tickfont"]["size"] = 52
     y_axis_layout_["nticks"] = 6
     y_axis_layout_["tickfont"]["size"] = 52
-    y_axis_layout_["range"] = [-10, 100]
+    y_axis_layout_["range"] = [-10, 60]
     if ylabel:
         y_axis_layout_["title"]["text"] = "Mops/s"
         y_axis_layout_["title"]["font"]["size"] = 50
@@ -624,20 +621,20 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
     )
     # legend_layout_['font']['size'] = 40
     layout_["legend"] = legend_layout_
-    layout_["width"] = 550
+    layout_["width"] = 700 if legend else 560
     layout_["height"] = 450 if legend else 400
 
     fig = go.Figure(layout=layout_)
     for algo in algos:
         symbol_ = plotconfig[algo]["symbol"]
-        line_ = {"width": 10, "color": plotconfig[algo]["color"]}
+        line_ = {"width": 7, "color": plotconfig[algo]["color"]}
         opacity_ = 1
         x_ = data[data["rqalg"] == plotconfig[algo]["macrobench"]][xaxis]
         y_ = data[data["rqalg"] == plotconfig[algo]["macrobench"]][yaxis]
         marker_ = {
             "symbol": symbol_,
             "opacity": opacity_,
-            "size": 40,
+            "size": 25,
             "line": {"color": "black", "width": 5 if not legend else 3},
         }
         name_ = "<b>" + plotconfig[algo]["label"] + "</b>"

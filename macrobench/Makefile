@@ -74,13 +74,15 @@ INCLUDE += -I../bundle_skiplist_lock
 INCLUDE += -I../bundle_citrus
 
 # vCAS specific flags
-INCLUDE += -I../vcas_bst
+# ---------------------
+# INCLUDE += -I../vcas_bst
 INCLUDE += -I../vcas_skiplist_lock
 INCLUDE += -I../vcas_citrus
 
+# Unsafe specific configs
 # ---------------------
-# INCLUDE += -I../unsafe/citrus
-# INCLUDE += -I../unsafe/skiplist_lock
+INCLUDE += -I../unsafe/citrus
+INCLUDE += -I../unsafe/skiplist_lock
 
 #CFLAGS += -DSKIP_PERMUTATIONS
 CFLAGS += $(INCLUDE) -DNOGRAPHITE=1 -O3 -DINDEX_STRUCT=IDX_$(dict) -DWORKLOAD=$(workload) #-Werror
