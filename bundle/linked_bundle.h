@@ -38,12 +38,12 @@ class BundleEntry {
   volatile timestamp_t deleted_ts_;
 
   BundleEntry() = delete;
-
   BundleEntry(timestamp_t ts, NodeType *ptr, BundleEntry *next)
       : ts_(ts), next_(next) {
     this->ptr_ = ptr;
     deleted_ts_ = BUNDLE_NULL_TIMESTAMP;
   }
+  ~BundleEntry() {}
 
   void set_ts(const timestamp_t ts) { ts_ = ts; }
   void set_ptr(NodeType *const ptr) { this->ptr_ = ptr; }
@@ -73,7 +73,7 @@ class LinkedBundle {
 
  public:
   ~LinkedBundle() {
-    BundleEntry<NodeType> *curr = head_;
+    BundleEntry<NodeType> *curr = head_.load();
     BundleEntry<NodeType> *next;
     while (curr != nullptr) {
       assert(curr != nullptr);
@@ -81,14 +81,9 @@ class LinkedBundle {
       delete curr;
       curr = next;
     }
-    // delete tail_;
   }
 
-  void init() {
-    // tail_ = new BundleEntry<NodeType>(BUNDLE_NULL_TIMESTAMP, nullptr,
-    // nullptr); head_ = tail_;
-    head_ = nullptr;
-  }
+  void init() { head_ = nullptr; }
 
   // Inserts a new rq_bundle_node at the head of the bundle.
   inline void prepare(NodeType *const ptr) {
@@ -233,44 +228,37 @@ class LinkedBundle {
   // ordered before adding a new entry to the bundle.
   inline void reclaimEntries(timestamp_t ts) {
     // Obtain a reference to the pred non-reclaimable entry and first
-    // reclaimable one.
+    // reclaimable one. Ignore the first entry if it is pending or return if
+    // there is nothing to reclaim.
     BundleEntry<NodeType> *pred = head_;
-    long i = 0;
+    if (pred == nullptr) return;
     if (pred->ts_ == BUNDLE_PENDING_TIMESTAMP) {
-      // DEBUG_PRINT("reclaimEntries");
       pred = pred->next_;
+      if (pred == nullptr) return;
     }
-    SOFTWARE_BARRIER;
     BundleEntry<NodeType> *curr = pred->next_;
-    if (pred == nullptr || curr == nullptr) {
-      return;  // Nothing to do.
-    }
+    if (curr == nullptr) return;
 
-    // If there are no active RQs then we can recycle all edges, but the
-    // newest (i.e., head). Similarly if the oldest active RQ is newer than
-    // the newest entry, we can reclaim all older entries.
-    if (ts == BUNDLE_NULL_TIMESTAMP || pred->ts_ <= ts) {
-      pred->next_ = nullptr;
-    } else {
-      // Traverse from head and remove nodes that are lower than ts.
-      while (curr != nullptr && curr->ts_ > ts) {
-        pred = curr;
-        curr = curr->next_;
-      }
-      if (curr != nullptr) {
-        // Curr points to the entry required by the oldest timestamp. This entry
-        // will become the last entry in the bundle.
-        pred = curr;
-        curr = curr->next_;
-        pred->next_ = nullptr;
-      }
+    // Traverse the list of entries until we find the first entry whose
+    // timestamp is less than or equal to the timestamp of the oldest range
+    // query. If none is found, then return.
+    while (curr != nullptr && pred->ts_ > ts) {
+      pred = curr;
+      curr = curr->next_;
     }
+    if (curr == nullptr) return;  // No reclaimable entry found.
+
+    // At this point, pred points to the oldest node required by the given
+    // timestamp. Therefore, we know that the chain starting at curr is
+    // reclaimable and can be unlinked.
+    pred->next_ = nullptr;
+
 #ifdef BUNDLE_DEBUG
     last_recycled = curr;
     oldest_edge = pred->ts_;
 #endif
 
-    // Reclaim nodes.
+    // Reclaim old entries by traversing the chain starting from curr.
     assert(curr != head_ && pred->next_ == nullptr);
     while (curr != nullptr) {
       pred = curr;

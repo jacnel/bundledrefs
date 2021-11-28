@@ -121,9 +121,9 @@ bundle_citrustree<K, V, RecManager>::bundle_citrustree(
 template <typename K, typename V, class RecManager>
 bundle_citrustree<K, V, RecManager>::~bundle_citrustree() {
   int numNodes = 0;
+  delete rqProvider;
   dfsDeallocateBottomUp(root, &numNodes);
   VERBOSE DEBUG COUTATOMIC(" deallocated nodes " << numNodes << endl);
-  delete rqProvider;
   recordmgr->printStatus();
   delete recordmgr;
 #ifdef USE_DEBUGCOUNTERS

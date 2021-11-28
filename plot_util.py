@@ -155,8 +155,7 @@ def parse_config(filepath):
                 continue
             entry = line.split("=", maxsplit=1)
             if entry[0] not in required_configs.keys():
-                print("Ignoring line in config.mk: {}".format(line))
-                continue
+                continue  # Skip irrelevant lines.
             config[entry[0]] = required_configs[entry[0]](entry[1])
     return config
 
@@ -235,9 +234,6 @@ class CSVFile:
         for o, w in zip(filter_col, filter_with):
             # Filter the data for the rows matching the column.
             data = data[data[o] == w]
-        # x = sorted(data[x_axis].unique())  # Get the unique x axis values
-        # y = data[y_axis].to_numpy()  # Get corresponding y values
-        # return {"x": x, "y": y}
         return data
 
     # Tries to create a csv file for the given data structure (ds) and number of trials (n).

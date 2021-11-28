@@ -167,10 +167,6 @@ class RQProvider {
     }
     if (backoff_amt < 1) backoff_amt = 1;
     if (backoff_amt > 512) backoff_amt = 512;
-
-#if defined(VCAS_STATS)
-      // nodesSeen.clear();
-#endif
     return ts + 1;
   }
 
@@ -198,7 +194,7 @@ class RQProvider {
 
   // Creates a snapshot of the current state of active RQs.
   inline timestamp_t get_oldest_active_rq() {
-    timestamp_t oldest_active = curr_timestamp_.load(std::memory_order_relaxed);
+    timestamp_t oldest_active = curr_timestamp_.load(std::memory_order_acquire);
     timestamp_t curr_rq;
     for (int i = 0; i < num_processes_; ++i) {
       while (rq_thread_data_[i].data.rq_flag == true)
@@ -213,7 +209,7 @@ class RQProvider {
 
 #ifdef BUNDLE_CLEANUP_BACKGROUND
   static void *cleanup_run(void *args) {
-    std::cout << "Staring cleanup" << std::endl << std::flush;
+    std::cout << "Starting cleanup" << std::endl << std::flush;
     struct cleanup_args *c = (struct cleanup_args *)args;
     long i = 0;
     while (!(*(c->stop))) {

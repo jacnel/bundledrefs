@@ -109,8 +109,8 @@ class bundle_citrustree {
     if (u->child[0]) dfsDeallocateBottomUp(u->child[0], numNodes);
     if (u->child[1]) dfsDeallocateBottomUp(u->child[1], numNodes);
     MEMORY_STATS++(*numNodes);
-    // recordmgr->deallocate(0 /* tid */, u);
-    delete u;
+    recordmgr->deallocate(0 /* tid */, u);
+    // delete u;
   }
 
   const V doInsert(const int tid, const K& key, const V& value,

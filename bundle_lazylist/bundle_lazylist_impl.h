@@ -372,11 +372,9 @@ void bundle_lazylist<K, V, RecManager>::cleanup(int tid) {
   BUNDLE_INIT_CLEANUP(rqProvider);
   while (head == nullptr)
     ;
-  BUNDLE_CLEAN_BUNDLE(&head->rqbundle);
+  BUNDLE_CLEAN_BUNDLE(head->rqbundle);
   for (nodeptr curr = head->next; curr->key != KEY_MAX; curr = curr->next) {
-    // if (!curr->marked) {
-    BUNDLE_CLEAN_BUNDLE(&curr->rqbundle);
-    // }
+    BUNDLE_CLEAN_BUNDLE(curr->rqbundle);
   }
   recordmgr->enterQuiescentState(tid);
 }

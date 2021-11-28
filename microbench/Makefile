@@ -4,7 +4,7 @@ PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_p
 GPP = g++
 FLAGS = -std=c++11 -mcx16 
 FLAGS += -O3
-# FLAGS += -O0 # -fsanitize=address -static-libasan -fsanitize=leak
+# FLAGS += -O0 -fsanitize=address -static-libasan -fsanitize=leak
 FLAGS += -g
 FLAGS += -DNDEBUG
 FLAGS += $(PLAF)

@@ -156,23 +156,6 @@ typedef bundle_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define ISLEAF(x) false
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
 
-#elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_RBUNDLE)
-#define BUNDLE_LINKED_BUNDLE
-#define BUNDLE_RESTARTS
-#define BUNDLE_OPTIMIZED_CONTAINS
-#include "bundle_skiplist_impl.h"
-typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
-typedef bool DESCRIPTOR_TYPE;  // no descriptor
-typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
-    RECORD_MANAGER_TYPE;
-typedef bundle_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
-#define INDEX_CONSTRUCTOR_ARGS                   \
-  g_thread_cnt, numeric_limits<KEY_TYPE>::min(), \
-      numeric_limits<KEY_TYPE>::max() - 1, __NO_VALUE, rngs
-#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
-#define ISLEAF(x) false
-#define VALUES_ARRAY_TYPE VALUE_TYPE *
-
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_VCAS)
 #define RQ_VCAS
 #define NVCAS_OPTIMIZATION
@@ -206,26 +189,6 @@ typedef unsafe_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
 #define BUNDLE_LINKED_BUNDLE
-#define BUNDLE_OPTIMIZED_CONTAINS
-#include "bundle_citrus_impl.h"
-typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
-typedef bool DESCRIPTOR_TYPE;  // no descriptor
-typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
-    RECORD_MANAGER_TYPE;
-typedef bundle_citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
-#define INDEX_CONSTRUCTOR_ARGS \
-  numeric_limits<KEY_TYPE>::max(), __NO_VALUE, g_thread_cnt
-#define ISLEAF(x) ((x)->child[0] == NULL && (x)->child[1] == NULL)
-#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth) \
-  {                                                        \
-    calculate_index_stats((x)->child[0], (depth));         \
-    calculate_index_stats((x)->child[1], (depth));         \
-  }
-#define VALUES_ARRAY_TYPE VALUE_TYPE *
-
-#elif (INDEX_STRUCT == IDX_CITRUS_RQ_RBUNDLE)
-#define BUNDLE_LINKED_BUNDLE
-#define BUNDLE_RESTARTS
 #define BUNDLE_OPTIMIZED_CONTAINS
 #include "bundle_citrus_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
