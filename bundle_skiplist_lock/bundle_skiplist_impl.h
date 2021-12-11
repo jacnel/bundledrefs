@@ -435,8 +435,8 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
 
       if (valid) {
         BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&p_preds[0]->rqbundle,
-                                                     nullptr};
-        nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
+                                                     &p_victim->rqbundle, nullptr};
+        nodeptr ptrs[] = {p_victim->p_next[0], p_head, nullptr};
         rqProvider->prepare_bundles(bundles, ptrs);
         timestamp_t lin_time = rqProvider->linearize_update_at_write(
             tid, &p_victim->marked, (long long)1);
@@ -510,13 +510,20 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
 
     // Phase 2. Enter snapshot
     ts = rqProvider->start_traversal(tid);
-    if (unlikely(!pred->rqbundle.getPtrByTimestamp(tid, ts, &curr))) {
+    ok = pred->rqbundle.getPtrByTimestamp(tid, ts, &curr);
+    assert(ok);
+    if (curr == p_head) {
 #ifdef __HANDLE_STATS
       GSTATS_ADD(tid, bundle_restarts, 1);
 #endif
-      rqProvider->end_traversal(tid);
-      recmgr->enterQuiescentState(tid);
-      continue;
+      // rqProvider->end_traversal(tid);
+      // recmgr->enterQuiescentState(tid);
+      // continue;
+    }
+
+    while (curr != nullptr && curr->key < lo) {
+      ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
+      assert(ok);
     }
 
     // Phase 3. Collect range

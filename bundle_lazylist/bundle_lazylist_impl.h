@@ -280,8 +280,9 @@ V bundle_lazylist<K, V, RecManager>::erase(const int tid, const K &key) {
       nodeptr c_nxt = curr->next;
 
       // Prepare bundles.
-      BUNDLE_TYPE_DECL<node_t<K, V>> *bundles[] = {&pred->rqbundle, nullptr};
-      nodeptr ptrs[] = {c_nxt, nullptr};
+      BUNDLE_TYPE_DECL<node_t<K, V>> *bundles[] = {&pred->rqbundle,
+                                                   &curr->rqbundle, nullptr};
+      nodeptr ptrs[] = {c_nxt, head, nullptr};
       rqProvider->prepare_bundles(bundles, ptrs);
 
       // Perform original linearization point.
@@ -336,12 +337,23 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K &lo,
 
     // Phase 2. Enter range using bundles.
     ts = rqProvider->start_traversal(tid);
-    if (!enterSnapshot(tid, pred, ts, &curr)) {
-      // If entering the range fails, then restart.
-      rqProvider->end_traversal(tid);
-      recordmgr->enterQuiescentState(tid);
-      continue;
+    ok = enterSnapshot(tid, pred, ts, &curr);
+    assert(ok);
+    if (curr == head) {
+#ifdef __HANDLE_STATS
+      GSTATS_ADD(tid, bundle_restarts, 1);
+#endif
     }
+    while (curr != nullptr && curr->key < lo) {
+      ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
+      assert(ok);
+    }
+    // if (!enterSnapshot(tid, pred, ts, &curr)) {
+    //   // If entering the range fails, then restart.
+    //   rqProvider->end_traversal(tid);
+    //   recordmgr->enterQuiescentState(tid);
+    //   continue;
+    // }
 
     // Phase 3. Range collect.
     while (curr != nullptr && curr->key <= hi) {
@@ -370,9 +382,11 @@ void bundle_lazylist<K, V, RecManager>::cleanup(int tid) {
   // Walk the list using the newest edge and reclaim bundle entries.
   recordmgr->leaveQuiescentState(tid);
   BUNDLE_INIT_CLEANUP(rqProvider);
-  while (head == nullptr)
-    ;
-  BUNDLE_CLEAN_BUNDLE(head->rqbundle);
+  if (head == nullptr) {
+    recordmgr->enterQuiescentState(tid);
+    return;
+  }
+  BUNDLE_CLEAN_BUNDLE(&head->rqbundle);
   for (nodeptr curr = head->next; curr->key != KEY_MAX; curr = curr->next) {
     BUNDLE_CLEAN_BUNDLE(curr->rqbundle);
   }

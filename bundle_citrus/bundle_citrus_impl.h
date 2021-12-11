@@ -349,8 +349,9 @@ retry:
 
     // Prepare bundles.
     BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction],
-                                                 nullptr};
-    nodeptr ptrs[] = {curr->child[1], nullptr};
+                                                 &curr->rqbundle[0],
+                                                 &curr->rqbundle[1], nullptr};
+    nodeptr ptrs[] = {curr->child[1], root->child[0], root->child[0], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 
     // Perform linearization.
@@ -379,8 +380,9 @@ retry:
 
     // Prepare bundles.
     BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&prev->rqbundle[direction],
-                                                 nullptr};
-    nodeptr ptrs[] = {curr->child[0], nullptr};
+                                                 &curr->rqbundle[0],
+                                                 &curr->rqbundle[1], nullptr};
+    nodeptr ptrs[] = {curr->child[0], root->child[0], root->child[0], nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 
     // Perform linearization.
@@ -433,11 +435,20 @@ retry:
     // implementation, this is updated after `synchronize()` but we perform this
     // check here to ensure that range queries follow the correct path.
     BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {
-        &prev->rqbundle[direction], &nnode->rqbundle[0], &nnode->rqbundle[1],
-        (prevSucc != curr ? &prevSucc->rqbundle[0] : nullptr), nullptr};
-    nodeptr ptrs[] = {nnode, curr->child[0],
+        &prev->rqbundle[direction],
+        &nnode->rqbundle[0],
+        &nnode->rqbundle[1],
+        &curr->rqbundle[0],
+        &curr->rqbundle[1],
+        (prevSucc != curr ? &prevSucc->rqbundle[0] : nullptr),
+        nullptr};
+    nodeptr ptrs[] = {nnode,
+                      curr->child[0],
                       (prevSucc != curr ? curr->child[1] : succ->child[1]),
-                      (prevSucc != curr ? succ->child[1] : nullptr), nullptr};
+                      root->child[0],
+                      root->child[0],
+                      (prevSucc != curr ? succ->child[1] : nullptr),
+                      nullptr};
     rqProvider->prepare_bundles(bundles, ptrs);
 
     // Perform linearization.
@@ -517,14 +528,14 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
 
     // Phase 2. Enter snapshot.
     ts = rqProvider->start_traversal(tid);
-    if (unlikely(
-            !pred->rqbundle[direction].getPtrByTimestamp(tid, ts, &curr))) {
+    ok = pred->rqbundle[direction].getPtrByTimestamp(tid, ts, &curr);
+    assert(ok);
+    if (curr == root->child[0]) {
       // A concurrent update may have inserted a new node immediately
       // preceding the range and we must start over.
 #ifdef __HANDLE_STATE
       GSTATS_ADD(tid, bundle_restarts, 1);
 #endif
-      continue;
     }
 
     // Phase 3. Enter range.

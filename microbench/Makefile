@@ -102,7 +102,7 @@ BUNDLE_FLAGS = -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE
 thispath=
 
 .PHONY: lazylist lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_unsafe lazylist.rq_bundle lazylist.rq_tsbundle lazylist.rq_vcas lazylist.rq_rlu
-lazylist: lazylist lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_unsafe lazylist.rq_bundle lazylist.rq_tsbundle lazylist.rq_vcas lazylist.rq_rlu
+lazylist: lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_unsafe lazylist.rq_bundle lazylist.rq_tsbundle lazylist.rq_vcas lazylist.rq_rlu
 lazylist.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)
 lazylist.rq_rwlock:
