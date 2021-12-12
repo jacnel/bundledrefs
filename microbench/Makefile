@@ -5,7 +5,7 @@ GPP = g++
 FLAGS = -std=c++11 -mcx16 
 FLAGS += -O3
 # FLAGS += -O0 -fsanitize=address -static-libasan -fsanitize=leak
-FLAGS += -g
+# FLAGS += -g
 FLAGS += -DNDEBUG
 FLAGS += $(PLAF)
 FLAGS += -DUSE_GSTATS
@@ -101,7 +101,7 @@ BUNDLE_FLAGS = -DRQ_BUNDLE -DBUNDLE_LINKED_BUNDLE
 
 thispath=
 
-.PHONY: lazylist lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_unsafe lazylist.rq_bundle lazylist.rq_tsbundle lazylist.rq_vcas lazylist.rq_rlu
+.PHONY: lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_unsafe lazylist.rq_bundle lazylist.rq_tsbundle lazylist.rq_vcas lazylist.rq_rlu
 lazylist: lazylist.rq_lockfree lazylist.rq_rwlock lazylist.rq_unsafe lazylist.rq_bundle lazylist.rq_tsbundle lazylist.rq_vcas lazylist.rq_rlu
 lazylist.rq_lockfree:
 	$(GPP) $(FLAGS) -o $(thispath)$(machine).$@$(filesuffix).out $(xargs) -DLAZYLIST -DRQ_LOCKFREE $(pinning) $(thispath)main.cpp $(LDFLAGS)

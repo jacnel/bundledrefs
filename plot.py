@@ -77,9 +77,8 @@ flags.DEFINE_list(
     [0, 2, 10, 50, 90, 100],
     "Rate of range query operations to use when plotting the 'workloads' experiment",
 )
-flags.DEFINE_integer(
-    "rqsize_maxkey", 100000, "Maximum key used when running the 'rq_size' experiment"
-)
+flags.DEFINE_integer("rqsize_maxkey", 100000,
+                     "Maximum key used when running the 'rq_size' experiment")
 flags.DEFINE_integer(
     "rqsizes_numrqthreads",
     24,
@@ -96,13 +95,12 @@ flags.DEFINE_list("datastructures", None, "List of data structures to plot")
 flags.DEFINE_list("max_keys", None, "List of max keys to use while plotting")
 flags.DEFINE_list("nthreads", None, "List of thread counts to plot")
 flags.DEFINE_integer(
-    "ntrials", 3, "Number of trials per experiment (used for averaging results)"
-)
+    "ntrials", 3,
+    "Number of trials per experiment (used for averaging results)")
 
 flags.DEFINE_bool("legends", True, "Whether to show legends in the plots")
-flags.DEFINE_bool(
-    "yaxis_titles", True, "Whether to include y-axis titles in the plots"
-)
+flags.DEFINE_bool("yaxis_titles", True,
+                  "Whether to include y-axis titles in the plots")
 
 
 def plot_workload(
@@ -135,7 +133,8 @@ def plot_workload(
         save_dir: Where plots are saved to.
     """
     reset_base_config()
-    csvfile = CSVFile.get_or_gen_csv(os.path.join(dirpath, "workloads"), ds, ntrials)
+    csvfile = CSVFile.get_or_gen_csv(os.path.join(dirpath, "workloads"), ds,
+                                     ntrials)
     csv = CSVFile(csvfile)
 
     # Provide column labels for desired x and y axis
@@ -151,11 +150,13 @@ def plot_workload(
 
     # Read in data for each algorithm
     count = 0
-    data = csv.getdata(["max_key", "u_rate", "rq_rate"], [max_key, u_rate, rq_rate])
+    data = csv.getdata(["max_key", "u_rate", "rq_rate"],
+                       [max_key, u_rate, rq_rate])
     data[y_axis] = data[y_axis] / 1000000
 
     if data.empty:
-        print("No data: (ds={}, max_key={}, u_rate={})".format(ds, max_key, u_rate))
+        report_empty("ds={}, max_key={}, u_rate={}".format(
+            ds, max_key, u_rate))
         return  # If no data to plot, then don't
 
     # Plot layout configuration.
@@ -172,8 +173,12 @@ def plot_workload(
     y_axis_layout_["nticks"] = 5
     legend_layout_ = (
         # {"font": legend_font_, "orientation": "h", "x": 0, "y": 1} if legend else {}
-        {"font": legend_font_, "orientation": "v", "x": 1.1, "y": 1} if legend else {}
-    )
+        {
+            "font": legend_font_,
+            "orientation": "v",
+            "x": 1.1,
+            "y": 1
+        } if legend else {})
     layout_["legend"] = legend_layout_
     layout_["autosize"] = False
     layout_["width"] = 800 if legend else 560
@@ -187,14 +192,22 @@ def plot_workload(
             "symbol": symbol_,
             "color": color_,
             "size": 25,
-            "line": {"width": (2 if legend else 5), "color": "black"},
+            "line": {
+                "width": (2 if legend else 5),
+                "color": "black"
+            },
         }
         line_ = {"width": 7}
         name_ = "<b>" + plotconfig[a]["label"] + "</b>"
         y_ = data[data["list"] == ds + "-" + a]
         y_ = y_[y_.wrk_threads.isin(threads)]["tot_thruput"]
         fig.add_scatter(
-            x=threads, y=y_, name=name_, marker=marker_, line=line_, showlegend=legend,
+            x=threads,
+            y=y_,
+            name=name_,
+            marker=marker_,
+            line=line_,
+            showlegend=legend,
         )
 
     if not save:
@@ -202,15 +215,8 @@ def plot_workload(
     else:
         save_dir = os.path.join(save_dir, "workloads/" + ds)
         os.makedirs(save_dir, exist_ok=True)
-        filename = (
-            "update"
-            + str(u_rate)
-            + "_rq"
-            + str(rq_rate)
-            + "_maxkey"
-            + str(max_key)
-            + ".html"
-        )
+        filename = ("update" + str(u_rate) + "_rq" + str(rq_rate) + "_maxkey" +
+                    str(max_key) + ".html")
         fig.write_html(os.path.join(save_dir, filename))
 
     # Print speedup for paper.
@@ -220,15 +226,8 @@ def plot_workload(
         overalgos = [
             k for k in plotconfig.keys() if (k not in ignore and k != overalgo)
         ]
-        print(
-            'Speedup over "'
-            + overalgo
-            + '" for '
-            + ds
-            + " @ "
-            + str(u_rate)
-            + "% updates\n"
-        )
+        print('Speedup over "' + overalgo + '" for ' + ds + " @ " +
+              str(u_rate) + "% updates\n")
         threads_printed = False
         for o in overalgos:
             o_name = ds + "-" + o
@@ -256,19 +255,21 @@ def plot_workload(
             print("{:<15}{}".format(o, "|"), end="")
             for t in threads:
                 numerator = data[data["list"] == o_name]
-                numerator = numerator[numerator["wrk_threads"] == t]["tot_thruput"]
+                numerator = numerator[numerator["wrk_threads"] ==
+                                      t]["tot_thruput"]
                 denominator = data[data["list"] == ds + "-" + overalgo]
-                denominator = denominator[denominator["wrk_threads"] == t][
-                    "tot_thruput"
-                ]
+                denominator = denominator[denominator["wrk_threads"] ==
+                                          t]["tot_thruput"]
                 try:
                     print(
-                        "{:>10.3}".format(numerator.values[0] / denominator.values[0]),
+                        "{:>10.3}".format(numerator.values[0] /
+                                          denominator.values[0]),
                         end="",
                     )
                 except:
                     print(
-                        "{:>10}".format("-"), end="",
+                        "{:>10}".format("-"),
+                        end="",
                     )
         print("\n\n")
 
@@ -296,21 +297,23 @@ def plot_rq_sizes(
     algos = [k for k in plotconfig.keys() if k not in ignore]
 
     count = 0
-    data = csv.getdata(
-        ["max_key", "rq_threads"], [max_key, FLAGS.rqsizes_numrqthreads]
-    )
+    data = csv.getdata(["max_key", "rq_threads"],
+                       [max_key, FLAGS.rqsizes_numrqthreads])
     # Normalize
     for y_axis in y_axes:
         data[y_axis] = data[y_axis] / 1000000
 
     if data.empty:
-        print("No data: (ds={}, max_key={})".format(ds, max_key))
+        report_empty("ds={}, max_key={}".format(ds, max_key))
         return  # If no data to ploy, then don't
 
     # Plot layout configuration.
-    legend_layout_ = (
-        {"font": legend_font_, "orientation": "v", "x": 1.15, "y": 1} if legend else {}
-    )
+    legend_layout_ = ({
+        "font": legend_font_,
+        "orientation": "v",
+        "x": 1.15,
+        "y": 1
+    } if legend else {})
     layout_["legend"] = legend_layout_
     layout_["autosize"] = False
     layout_["width"] = 1260
@@ -360,7 +363,10 @@ def plot_rq_sizes(
                 "symbol": symbol_,
                 "color": color_,
                 "size": 25,
-                "line": {"width": 5, "color": "black"},
+                "line": {
+                    "width": 5,
+                    "color": "black"
+                },
             }
             line_ = {"width": 7}
             name_ = "<b>" + plotconfig[a]["label"] + "</b>"
@@ -384,23 +390,22 @@ def plot_rq_sizes(
     else:
         save_dir = os.path.join(save_dir, "rq_sizes/" + ds)
         os.makedirs(save_dir, exist_ok=True)
-        filename = (
-            "nrqthreads"
-            + str(FLAGS.rqsizes_numrqthreads)
-            + "_maxkey"
-            + str(max_key)
-            + ".html"
-        )
+        filename = ("nrqthreads" + str(FLAGS.rqsizes_numrqthreads) +
+                    "_maxkey" + str(max_key) + ".html")
         fig.write_html(os.path.join(save_dir, filename))
 
 
-def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_dir=""):
+def plot_macrobench(dirpath,
+                    ds,
+                    ylabel=False,
+                    legend=False,
+                    save=False,
+                    save_dir=""):
     if not os.path.exists(os.path.join(dirpath, "data.csv")):
         subprocess.call(
-            "./macrobench/make_csv.sh "
-            + os.path.join(dirpath, "summary.txt")
-            + " "
-            + os.path.join(dirpath, "data.csv"),
+            "./macrobench/make_csv.sh " +
+            os.path.join(dirpath, "summary.txt") + " " +
+            os.path.join(dirpath, "data.csv"),
             shell=True,
         )
 
@@ -428,10 +433,8 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
                 newvals = numerator.values / denominator.values
                 print(newvals)
                 print("AVG: " + str(pandas.DataFrame(newvals).mean().values))
-                print(
-                    "AVG (multithreaded-only): "
-                    + str(pandas.DataFrame(newvals[1:]).mean().values)
-                )
+                print("AVG (multithreaded-only): " +
+                      str(pandas.DataFrame(newvals[1:]).mean().values))
             except:
                 print("-")
 
@@ -445,9 +448,12 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
         y_axis_layout_["title"]["font"]["size"] = 50
     else:
         y_axis_layout_["title"] = None
-    legend_layout_ = (
-        {"font": legend_font_, "orientation": "h", "x": 0, "y": 1.15} if legend else {}
-    )
+    legend_layout_ = ({
+        "font": legend_font_,
+        "orientation": "h",
+        "x": 0,
+        "y": 1.15
+    } if legend else {})
     # legend_layout_['font']['size'] = 40
     layout_["legend"] = legend_layout_
     layout_["width"] = 700 if legend else 560
@@ -464,7 +470,10 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
             "symbol": symbol_,
             "opacity": opacity_,
             "size": 25,
-            "line": {"color": "black", "width": 5 if not legend else 3},
+            "line": {
+                "color": "black",
+                "width": 5 if not legend else 3
+            },
         }
         name_ = "<b>" + plotconfig[algo]["label"] + "</b>"
         fig.add_trace(
@@ -476,8 +485,7 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
                 marker=marker_,
                 line=line_,
                 showlegend=legend,
-            )
-        )
+            ))
 
         # Uncommenting below and commenting above will include fewer points on the plot
         # fig.add_trace(go.Scatter(
@@ -493,13 +501,15 @@ def plot_macrobench(dirpath, ds, ylabel=False, legend=False, save=False, save_di
 def get_threads_config():
     nthreads = []
     if FLAGS.detect_threads:
-        print('Automatically deriving thread configuration from "./config.mk"...')
+        print(
+            'Automatically deriving thread configuration from "./config.mk"...'
+        )
         nthreads.append(1)
         threads_config = parse_config("./config.mk")
         for i in range(
-            threads_config["threadincrement"],
-            threads_config["maxthreads"],
-            threads_config["threadincrement"],
+                threads_config["threadincrement"],
+                threads_config["maxthreads"],
+                threads_config["threadincrement"],
         ):
             nthreads.append(i)
         nthreads.append(threads_config["maxthreads"])
@@ -514,13 +524,16 @@ def get_microbench_configs():
     if FLAGS.detect_experiments:
         print("Automatically detecting microbenchmark configurations")
         return parse_experiment_list_generate(
-            FLAGS.generate_script, ["run_workloads", "run_rq_sizes"],
+            FLAGS.generate_script,
+            ["run_workloads", "run_rq_sizes"],
         )
     else:
         experiments = FLAGS.experiments
         experiment_configs = {}
         experiment_configs["datastructures"] = FLAGS.datastructures
-        experiment_configs["ksizes"] = [int(max_key) for max_key in FLAGS.max_keys]
+        experiment_configs["ksizes"] = [
+            int(max_key) for max_key in FLAGS.max_keys
+        ]
         return experiments, experiment_configs
 
 
@@ -611,4 +624,3 @@ def main(argv):
 
 if __name__ == "__main__":
     app.run(main)
-

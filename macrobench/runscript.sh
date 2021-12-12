@@ -81,5 +81,3 @@ for counting in 1 0; do
     done
   done
 done
-
-./makecsv.sh $fsummary data.csv

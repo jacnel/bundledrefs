@@ -31,8 +31,8 @@ avgannounce=0
 avgbag=0
 reachable=0
 avgbundle=0
-expectedcount=0
 trialcount=0
+samplecount=0
 nobundlestats=0
 restarts=0
 avgretries=0
@@ -48,6 +48,7 @@ for algo in ${algos}; do
     if [[ "${listname}" != "" ]] && [[ "$(echo ${filename} | grep ${listname})" == "" ]]; then
       exit
     elif [[ "$(echo ${filename} | sed 's/.*[.]csv/.csv/')" == ".csv" ]]; then
+      # Skip any generated .csv files.
       continue
     fi
 
@@ -55,7 +56,9 @@ for algo in ${algos}; do
     rootname=$(echo ${filename} | sed -E 's/step[0-9]+[.]//' | sed -e 's/[.]trial.*//')
     if [[ ! "${rootname}" == "${currfile}" ]]; then
       trialcount=0
+      samplecount=0
       currfile=${rootname}
+
       config=$(cat ${filename} | grep -B 10000 'BEGIN RUNNING')
 
       # Get name of list.
@@ -74,9 +77,10 @@ for algo in ${algos}; do
       rqthrds=$(echo "${config}" | grep 'RQ_THREADS=' | sed -e 's/.*=//')
     fi
 
+    trialcount=$((trialcount + 1))
     filecontents=$(cat ${filename} | grep -A 10000 'END RUNNING')
-    if [[ "$(echo "${filecontents}" | grep 'garbage')" == "" ]]; then
-      expectedcount=$((${expectedcount} + 1))
+    if [[ $(echo "${filecontents}" | grep -c 'end delete ds') != 1 ]]; then
+      # Skip if not a completed run.
       continue
     fi
 
@@ -95,44 +99,52 @@ for algo in ${algos}; do
 
     # EBR specific statistics.
     # if [[ "${nobundlestats}" == 0 ]] && ([[ "${rqstrategy}" == "lbundle" ]] || [[ "${rqstrategy}" == "cbundle" ]]); then
-      # Bundle specific statistics.
-      # reachable=$(($(echo "${filecontents}" | grep 'total reachable_nodes' | sed -e 's/.*: //') + ${reachable}))
-      # if [[ ${reachable} != 0 ]]; then
-        # avgbundle=$(echo "$(echo "${filecontents}" | grep 'average bundle_size' | sed -e 's/.*: //') + ${avgbundle}" | bc)
-      # fi
+    # Bundle specific statistics.
+    # reachable=$(($(echo "${filecontents}" | grep 'total reachable_nodes' | sed -e 's/.*: //') + ${reachable}))
+    # if [[ ${reachable} != 0 ]]; then
+    # avgbundle=$(echo "$(echo "${filecontents}" | grep 'average bundle_size' | sed -e 's/.*: //') + ${avgbundle}" | bc)
+    # fi
     # else
-      # if [[ "${avgbundle}" != "0" ]]; then
-      #   exit 1
-      # fi
-      avgannounce=$(($(echo "${filecontents}" | grep 'average visited_in_announcements' | sed -e 's/.*=//') + ${avgannounce}))
-      avgbag=$(($(echo "${filecontents}" | grep 'average visited_in_bags' | sed -e 's/.*=//') + ${avgbag}))
+    # if [[ "${avgbundle}" != "0" ]]; then
+    #   exit 1
+    # fi
+    avgannounce=$(($(echo "${filecontents}" | grep 'average visited_in_announcements' | sed -e 's/.*=//') + ${avgannounce}))
+    avgbag=$(($(echo "${filecontents}" | grep 'average visited_in_bags' | sed -e 's/.*=//') + ${avgbag}))
     # fi
 
     restarts=$(($(echo "${filecontents}" | grep 'sum bundle_restarts' | sed -e 's/.*=//') + ${restarts}))
     avgretries=$(($(echo "${filecontents}" | grep 'average bundle_retries' | sed -e 's/.*=//') + ${avgretries}))
     avgtraversals=$(($(echo "${filecontents}" | grep 'average bundle_traversals' | sed -e 's/.*=//') + ${avgtraversals}))
 
-    trialcount=$((${trialcount} + 1))
+    samplecount=$((${samplecount} + 1))
 
     # Output previous averages.
     if [[ ${trialcount} == ${ntrials} ]]; then
-      printf "%s,%d,%.2f,%.2f,%d,%d,%d" ${list} ${maxkey} ${urate} ${rqrate} ${nwrkthrds} ${rqthrds} ${rqsize} >>${outfile}
-      printf ",%d" $((${ulat} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${clat} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${rqlat} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${totthrupt} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${uthrupt} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${totthrupt} - (${uthrupt} + ${rqthrupt}))) >>${outfile}
-      printf ",%d" $((${rqthrupt} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${avgrqlen} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${avgannounce} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${avgbag} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${reachable} / ${ntrials})) >>${outfile}
-      printf ",%.2f" $(echo "scale=4;$(echo ${avgbundle}) / ${ntrials}.0" | bc) >>${outfile}
-      printf ",%d" $((${restarts} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${avgretries} / ${ntrials})) >>${outfile}
-      printf ",%d" $((${avgtraversals} / ${ntrials})) >>${outfile}
-      printf "\n" >>${outfile}
+      if [[ ${samplecount} != ${ntrials} ]]; then
+        echo "Warning: unexpected number of samples (${samplecount}). Computing averages anyway: ${rootname}"
+      fi
+
+      if [[ ${samplecount} != 0 ]]; then
+        printf "%s,%d,%.2f,%.2f,%d,%d,%d" ${list} ${maxkey} ${urate} ${rqrate} ${nwrkthrds} ${rqthrds} ${rqsize} >>${outfile}
+        printf ",%d" $((${ulat} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${clat} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${rqlat} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${totthrupt} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${uthrupt} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${totthrupt} - (${uthrupt} + ${rqthrupt}))) >>${outfile}
+        printf ",%d" $((${rqthrupt} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${avgrqlen} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${avgannounce} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${avgbag} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${reachable} / ${samplecount})) >>${outfile}
+        printf ",%.2f" $(echo "scale=4;$(echo ${avgbundle}) / ${samplecount}.0" | bc) >>${outfile}
+        printf ",%d" $((${restarts} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${avgretries} / ${samplecount})) >>${outfile}
+        printf ",%d" $((${avgtraversals} / ${samplecount})) >>${outfile}
+        printf "\n" >>${outfile}
+      else
+        echo "Error: No samples collected: ${rootname}"
+      fi
       ulat=0
       clat=0
       rqlat=0

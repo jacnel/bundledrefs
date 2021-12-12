@@ -20,12 +20,17 @@ run_workloads() {
   count=0
   rqsize=50
   # rqrates="0 2 10 50"
-  rqrates="10"
+  rqrates="0 10"
   urates="0 1 5 25 45 50" # 2 * rate = total update %
   nrq=0
   prepare_exp "workloads" >>experiment_list.txt
   for rq in $rqrates; do
     for u in $urates; do
+      # Only run at 0% RQ if we are testing 100% updates.
+      if [[ $rq == 0 ]] && [[ $u != 50 ]]; then
+        continue
+      fi
+
       for k in $ksizes; do
         for ds in $datastructures; do
           for alg in $rqtechniques; do

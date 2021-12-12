@@ -4,9 +4,9 @@ import subprocess
 
 # General configuration.
 COLORS = [
-    "rgb(255,255,106)", # Yellow
-    "rgb(31,120,180)", # Blue
-    "rgb(178,223,138)", # 
+    "rgb(255,255,106)",  # Yellow
+    "rgb(31,120,180)",  # Blue
+    "rgb(178,223,138)",  # 
     "rgb(51,160,44)",
     "rgb(251,154,153)",
     "rgb(207,233,252)",
@@ -29,8 +29,18 @@ plotconfig = {
         "symbol": 0,
         "macrobench": "RQ_LOCKFREE",
     },
-    "vcas": {"label": "vCAS", "color": COLORS[2], "symbol": 6, "macrobench": "RQ_VCAS"},
-    "rlu": {"label": "RLU", "color": COLORS[4], "symbol": 3, "macrobench": "RQ_RLU"},
+    "vcas": {
+        "label": "vCAS",
+        "color": COLORS[2],
+        "symbol": 6,
+        "macrobench": "RQ_VCAS"
+    },
+    "rlu": {
+        "label": "RLU",
+        "color": COLORS[4],
+        "symbol": 3,
+        "macrobench": "RQ_RLU"
+    },
     "unsafe": {
         "label": "Unsafe",
         "color": COLORS[5],
@@ -47,7 +57,7 @@ plotconfig = {
         "label": "Bundle",
         "color": COLORS[0],
         "symbol": 2,
-        "macrobench": "RQ_RBUNDLE",
+        "macrobench": "RQ_BUNDLE",
     },
     # "rbundle": {
     #     "label": "Bundle (r)",
@@ -70,25 +80,77 @@ def update_opacity(colorstr, opacity):
 
 
 relaxconfig = {
-    "relax1": {"label": "T=1", "color": COLORS[0], "symbol": 1},
-    "relax2": {"label": "T=2", "color": COLORS[1], "symbol": 0},
-    "relax5": {"label": "T=5", "color": COLORS[2], "symbol": 3},
+    "relax1": {
+        "label": "T=1",
+        "color": COLORS[0],
+        "symbol": 1
+    },
+    "relax2": {
+        "label": "T=2",
+        "color": COLORS[1],
+        "symbol": 0
+    },
+    "relax5": {
+        "label": "T=5",
+        "color": COLORS[2],
+        "symbol": 3
+    },
     # 'relax10': {'color': 'seagreen', 'symbol': 2},
     # 'relax20': {'color': 'darkorange', 'symbol': 5},
-    "relax50": {"label": "T=50", "color": COLORS[3], "symbol": 4},
-    "relax100": {"label": "T=100", "color": COLORS[4], "symbol": 6},
-    "relax1k": {"label": "T=1000", "color": COLORS[5], "symbol": 7},
+    "relax50": {
+        "label": "T=50",
+        "color": COLORS[3],
+        "symbol": 4
+    },
+    "relax100": {
+        "label": "T=100",
+        "color": COLORS[4],
+        "symbol": 6
+    },
+    "relax1k": {
+        "label": "T=1000",
+        "color": COLORS[5],
+        "symbol": 7
+    },
     # 'relax10k': {'label': 'T=10000', 'color': COLORS[6], 'symbol': 8},
-    "ubundle": {"label": "T=infinity", "color": COLORS[9], "symbol": 9},
+    "ubundle": {
+        "label": "T=infinity",
+        "color": COLORS[9],
+        "symbol": 9
+    },
 }
 
 delayconfig = {
-    "delay0": {"label": "d=0ms", "color": COLORS[0], "symbol": 1},
-    "delay1000": {"label": "d=1ms", "color": COLORS[1], "symbol": 0},
-    "delay5000": {"label": "T=5ms", "color": COLORS[2], "symbol": 3},
-    "delay10000": {"label": "T=10ms", "color": COLORS[3], "symbol": 4},
-    "delay100000": {"label": "T=100ms", "color": COLORS[4], "symbol": 6},
-    "nofree": {"label": "Leaky", "color": COLORS[5], "symbol": 7},
+    "delay0": {
+        "label": "d=0ms",
+        "color": COLORS[0],
+        "symbol": 1
+    },
+    "delay1000": {
+        "label": "d=1ms",
+        "color": COLORS[1],
+        "symbol": 0
+    },
+    "delay5000": {
+        "label": "T=5ms",
+        "color": COLORS[2],
+        "symbol": 3
+    },
+    "delay10000": {
+        "label": "T=10ms",
+        "color": COLORS[3],
+        "symbol": 4
+    },
+    "delay100000": {
+        "label": "T=100ms",
+        "color": COLORS[4],
+        "symbol": 6
+    },
+    "nofree": {
+        "label": "Leaky",
+        "color": COLORS[5],
+        "symbol": 7
+    },
 }
 
 separate_unsafe = True
@@ -184,7 +246,8 @@ def parse_experiment_list_generate(filepath, experiment_commands):
             for k in configs.keys():
                 if k in line and "=" in line:
                     entry = line.split("=", maxsplit=1)
-                    filtered = "".join((filter(lambda x: x not in ['"'], entry[1])))
+                    filtered = "".join((filter(lambda x: x not in ['"'],
+                                               entry[1])))
                     value = filtered.split(" ")  # list is space separated
                     if k == "ksizes":
                         configs[entry[0]] = [int(v) for v in value]
@@ -208,7 +271,8 @@ def parse_runscript(filepath, config_list):
             for k in configs.keys():
                 if k in line:
                     entry = line.split("=", maxsplit=1)
-                    filtered = "".join((filter(lambda x: x not in ['"'], entry[1])))
+                    filtered = "".join((filter(lambda x: x not in ['"'],
+                                               entry[1])))
                     if k == "trials":
                         configs[k] = int(filtered)
                     done[k] = True
@@ -219,12 +283,20 @@ def parse_runscript(filepath, config_list):
     return configs
 
 
+def report_empty(run):
+    print(
+        "Warning: No data found; skipping ({}). This is not always an error (see `microbench/supported.inc`)"
+        .format(run))
+
+
 class CSVFile:
     """A wrapper class to read and manipulate data from output produced by make_csv.sh"""
-
     def __init__(self, filepath):
         self.filepath = filepath
-        self.df = pandas.read_csv(filepath, sep=",", engine="c", index_col=False)
+        self.df = pandas.read_csv(filepath,
+                                  sep=",",
+                                  engine="c",
+                                  index_col=False)
 
     def __str__(self):
         return str(self.df.columns)
@@ -244,7 +316,8 @@ class CSVFile:
         if not os.path.exists(filepath):
             print("No .csv file found for " + ds + ". Generating it now...")
             subprocess.call(
-                "./microbench/make_csv.sh " + dirpath + " " + str(n) + " " + ds,
+                "./microbench/make_csv.sh " + dirpath + " " + str(n) + " " +
+                ds,
                 shell=True,
             )
         return filepath

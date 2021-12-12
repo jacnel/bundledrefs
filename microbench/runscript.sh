@@ -21,8 +21,8 @@ skip_steps_after=1000000
 outdir=data
 fsummary=$outdir/summary.txt
 
-rm -r -f $outdir.old
-mv -f $outdir $outdir.old
+rm -r -f $outdir.old 2>/dev/null
+mv -f $outdir $outdir.old 2>/dev/null
 mkdir $outdir
 
 rm -f warnings.txt
@@ -94,7 +94,7 @@ while read u rq rqsize k nrq nwork ds alg; do
   done
 done <experiment_list.txt
 
-if [ "$(cat warnings.txt | wc -l)" -ne 0 ]; then
+if [ "$(cat warnings.txt 2>/dev/null | wc -l)" -ne 0 ]; then
   echo "NOTE: THERE WERE WARNINGS. PRINTING THEM..."
   cat warnings.txt
 fi
