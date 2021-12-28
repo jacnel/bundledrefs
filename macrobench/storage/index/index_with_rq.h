@@ -12,10 +12,10 @@
 
 #include <csignal>
 #include <cstring>
-#include <limits>
-#include "index_base.h"  // for table_t declaration, and parent class inheritance
-
 #include <ctime>
+#include <limits>
+
+#include "index_base.h"  // for table_t declaration, and parent class inheritance
 #include "plaf.h"
 #include "random.h"
 static Random
@@ -63,8 +63,12 @@ typedef reclaimer_debra<> RECLAIMER_TYPE;
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_SNAPCOLLECTOR)
 #define RQ_SNAPCOLLECTOR
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE) || \
-    (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
+    (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE) ||         \
+    (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_RBUNDLE) ||  \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_RBUNDLE)
 #define RQ_BUNDLE
+#elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_VCAS) || \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_VCAS)
 #endif
 
 #if 0
@@ -91,7 +95,7 @@ typedef bst<KEY_TYPE, VALUE_TYPE, less<KEY_TYPE>, RECORD_MANAGER_TYPE>
 
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_LOCKFREE) || \
     (INDEX_STRUCT == IDX_CITRUS_RQ_RWLOCK) ||     \
-    (INDEX_STRUCT == IDX_CITRUS_RQ_HTM_RWLOCK) // || \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_HTM_RWLOCK)  // || \
     // (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE)
 #include "citrus_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
@@ -113,7 +117,7 @@ typedef citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
     (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_RWLOCK) ||     \
     (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_HTM_RWLOCK) || \
     (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_SNAPCOLLECTOR)
-    // (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_UNSAFE) ||     
+// (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_UNSAFE) ||
 #include "skiplist_lock_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
@@ -137,14 +141,31 @@ typedef skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
 
 #elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE)
-#define BUNDLE_MAX_BUNDLES_UPDATED 2
 #define BUNDLE_LINKED_BUNDLE
+#define BUNDLE_OPTIMIZED_CONTAINS
 #include "bundle_skiplist_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
 typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
     RECORD_MANAGER_TYPE;
 typedef bundle_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
+#define INDEX_CONSTRUCTOR_ARGS                   \
+  g_thread_cnt, numeric_limits<KEY_TYPE>::min(), \
+      numeric_limits<KEY_TYPE>::max() - 1, __NO_VALUE, rngs
+#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
+#define ISLEAF(x) false
+#define VALUES_ARRAY_TYPE VALUE_TYPE *
+
+#elif (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_VCAS)
+#define RQ_VCAS
+#define NVCAS_OPTIMIZATION
+#include "vcas_skiplist_lock_impl.h"
+using namespace vcas_skiplist_lock;
+typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
+typedef bool DESCRIPTOR_TYPE;  // no descriptor
+typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
+    RECORD_MANAGER_TYPE;
+typedef skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define INDEX_CONSTRUCTOR_ARGS                   \
   g_thread_cnt, numeric_limits<KEY_TYPE>::min(), \
       numeric_limits<KEY_TYPE>::max() - 1, __NO_VALUE, rngs
@@ -167,8 +188,8 @@ typedef unsafe_skiplist<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
 
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
-#define BUNDLE_MAX_BUNDLES_UPDATED 4
 #define BUNDLE_LINKED_BUNDLE
+#define BUNDLE_OPTIMIZED_CONTAINS
 #include "bundle_citrus_impl.h"
 typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
 typedef bool DESCRIPTOR_TYPE;  // no descriptor
@@ -177,8 +198,32 @@ typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
 typedef bundle_citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define INDEX_CONSTRUCTOR_ARGS \
   numeric_limits<KEY_TYPE>::max(), __NO_VALUE, g_thread_cnt
-#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
-#define ISLEAF(x) false
+#define ISLEAF(x) ((x)->child[0] == NULL && (x)->child[1] == NULL)
+#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth) \
+  {                                                        \
+    calculate_index_stats((x)->child[0], (depth));         \
+    calculate_index_stats((x)->child[1], (depth));         \
+  }
+#define VALUES_ARRAY_TYPE VALUE_TYPE *
+
+#elif (INDEX_STRUCT == IDX_CITRUS_RQ_VCAS)
+#define RQ_VCAS
+#define NVCAS_OPTIMIZATION
+#include "vcas_citrus_impl.h"
+using namespace vcas_citrus;
+typedef node_t<KEY_TYPE, VALUE_TYPE> NODE_TYPE;
+typedef bool DESCRIPTOR_TYPE;  // no descriptor
+typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
+    RECORD_MANAGER_TYPE;
+typedef citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
+#define INDEX_CONSTRUCTOR_ARGS \
+  numeric_limits<KEY_TYPE>::max(), __NO_VALUE, g_thread_cnt
+#define ISLEAF(x) ((x)->child[0]->val == NULL && (x)->child[1]->val == NULL)
+#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth) \
+  {                                                        \
+    calculate_index_stats((x)->child[0]->val, (depth));         \
+    calculate_index_stats((x)->child[1]->val, (depth));         \
+  }
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
 
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE)
@@ -190,8 +235,12 @@ typedef record_manager<RECLAIMER_TYPE, ALLOCATOR_TYPE, POOL_TYPE, NODE_TYPE>
 typedef unsafe_citrustree<KEY_TYPE, VALUE_TYPE, RECORD_MANAGER_TYPE> INDEX_TYPE;
 #define INDEX_CONSTRUCTOR_ARGS \
   numeric_limits<KEY_TYPE>::max(), __NO_VALUE, g_thread_cnt
-#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth)
-#define ISLEAF(x) false
+#define ISLEAF(x) ((x)->child[0] == NULL && (x)->child[1] == NULL)
+#define CALL_CALCULATE_INDEX_STATS_FOREACH_CHILD(x, depth) \
+  {                                                        \
+    calculate_index_stats((x)->child[0], (depth));         \
+    calculate_index_stats((x)->child[1], (depth));         \
+  }
 #define VALUES_ARRAY_TYPE VALUE_TYPE *
 
 #elif (INDEX_STRUCT == IDX_CITRUS_RQ_RLU)
@@ -330,11 +379,13 @@ class index_with_rq : public index_base {
   }
   RC index_remove(KEY_TYPE key, int part_id = -1) {
 #if (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE) ||     \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_RBUNDLE) ||    \
     (INDEX_STRUCT == IDX_CITRUS_RQ_LOCKFREE) ||   \
     (INDEX_STRUCT == IDX_CITRUS_RQ_RWLOCK) ||     \
     (INDEX_STRUCT == IDX_CITRUS_RQ_HTM_RWLOCK) || \
     (INDEX_STRUCT == IDX_CITRUS_RQ_UNSAFE) ||     \
-    (INDEX_STRUCT == IDX_CITRUS_RQ_RLU) 
+    (INDEX_STRUCT == IDX_CITRUS_RQ_RLU) || \
+    (INDEX_STRUCT == IDX_CITRUS_RQ_VCAS)
     const void *oldVal = (VALUE_TYPE)index->erase(tid, key).first;
 #else
     const void *oldVal = index->erase(tid, key);

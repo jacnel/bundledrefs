@@ -11,6 +11,13 @@
 ## Then, configure the thread pinning/binding policy (see README.txt.old)
 ## Blank means no thread pinning. (Threads can run wherever they want.)
 
+# The following is used by the benchmarks to find the allocator to be used by the various 
+# components. If it is blank, then the default system alloctor will be used. Note that 
+# when setting the path, it must have the same relative path to the `runscript.sh`
+# scripts in the `microbench` and `macrobench` directories, since that is where it is used.
+# allocator=../lib/libjemalloc.so
+allocator=
+
 # maxthreads=64
 # maxthreads_powerof2=128
 # threadincrement=16

@@ -21,8 +21,8 @@ skip_steps_after=1000000
 outdir=data
 fsummary=$outdir/summary.txt
 
-rm -r -f $outdir.old
-mv -f $outdir $outdir.old
+rm -r -f $outdir.old 2>/dev/null
+mv -f $outdir $outdir.old 2>/dev/null
 mkdir $outdir
 
 rm -f warnings.txt
@@ -30,6 +30,7 @@ rm -f warnings.txt
 if [ "$#" -eq "1" ]; then
   testingmode=1
   millis=1
+  trials=1
   prefill_and_time="-t ${millis}"
 else
   testingmode=0
@@ -78,8 +79,13 @@ while read u rq rqsize k nrq nwork ds alg; do
     fname="${currdir}/${alg}/step$cnt1.$machine.${ds}.${alg}.k$k.u$u.rq$rq.rqsize$rqsize.nrq$nrq.nwork$nwork.trial$trial.out"
     # echo "FNAME=$fname"
     cmd="./${machine}.${ds}.rq_${alg}.out -i $u -d $u -k $k -rq $rq -rqsize $rqsize ${prefill_and_time} -nrq $nrq -nwork $nwork ${pinning_policy}"
-    echo "env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so $cmd" >$fname
-    env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so $cmd >>$fname
+    if [[ "${allocator}" != "" ]]; then
+      echo "env LD_PRELOAD=${allocator} TREE_MALLOC=${allocator} $cmd" >$fname
+      env LD_PRELOAD=${allocator} TREE_MALLOC=${allocator} $cmd >>$fname
+    else
+      echo "$cmd" >$fname
+      env $cmd >>$fname
+    fi
     printf "${cols}" $cnt1 $machine $ds $alg $k $u $rq $rqsize $nrq $nwork $trial "$(cat $fname | grep 'total throughput' | cut -d':' -f2)" "$(cat $fname | grep 'total rq' | cut -d':' -f2)" "$(cat $fname | grep 'total updates' | cut -d':' -f2)" "$(cat $fname | grep 'total find' | cut -d':' -f2)" >>$fsummary
     tail -1 $fsummary
     echo
@@ -93,7 +99,7 @@ while read u rq rqsize k nrq nwork ds alg; do
   done
 done <experiment_list.txt
 
-if [ "$(cat warnings.txt | wc -l)" -ne 0 ]; then
+if [ "$(cat warnings.txt 2>/dev/null | wc -l)" -ne 0 ]; then
   echo "NOTE: THERE WERE WARNINGS. PRINTING THEM..."
   cat warnings.txt
 fi

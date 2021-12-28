@@ -30,6 +30,7 @@ using namespace std;
 template <typename K, typename V>
 class node_t {
  public:
+  BUNDLE_TYPE_DECL<node_t<K, V>> rqbundle;
   struct {
    public:
     volatile long lock;
@@ -49,7 +50,6 @@ class node_t {
 
     node_t<K, V>* volatile p_next[SKIPLIST_MAX_LEVEL];
   };
-  BUNDLE_TYPE_DECL<node_t<K, V>> rqbundle;
 
   bool validate() {
     timestamp_t ts;

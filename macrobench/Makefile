@@ -1,7 +1,7 @@
 include ../config.mk
 PLAF = -DLOGICAL_PROCESSORS=$(maxthreads_powerof2) -DMAX_TID_POW2=$(maxthreads_powerof2) -DCPU_FREQ_GHZ=$(cpu_freq_ghz) -DCPU_FREQ=$(cpu_freq_ghz)
 
-dict=SKIPLISTLOCK_RQ_UNSAFE
+dict=SKIPLISTLOCK_RQ_BUNDLE
 workload=TPCC
 
 CC=g++
@@ -27,8 +27,8 @@ INCLUDE = -I. -I./include -I./benchmarks -I./concurrency_control -I./storage -I.
 
 ######################## DEFINES FOR RQ_DATA STRUCTURES ########################
 #CFLAGS += -Winline
-# CFLAGS += -DNDEBUG
-#CFLAGS += -DNO_FREE
+CFLAGS += -DNDEBUG
+CFLAGS += -DNO_FREE
 #CFLAGS += -DUSE_STL_HASHLIST
 CFLAGS += -DUSE_SIMPLIFIED_HASHLIST
 #CFLAGS += -DRAPID_RECLAMATION
@@ -66,9 +66,21 @@ INCLUDE += -I../rlu_linked_list
 INCLUDE += -I../skiplist_lock
 INCLUDE += -I../rq
 INCLUDE += -I../rq/snapcollector
+
+# Bundle specific flags
+# ---------------------
 INCLUDE += -I../bundle
 INCLUDE += -I../bundle_skiplist_lock
 INCLUDE += -I../bundle_citrus
+
+# vCAS specific flags
+# ---------------------
+# INCLUDE += -I../vcas_bst
+INCLUDE += -I../vcas_skiplist_lock
+INCLUDE += -I../vcas_citrus
+
+# Unsafe specific configs
+# ---------------------
 INCLUDE += -I../unsafe/citrus
 INCLUDE += -I../unsafe/skiplist_lock
 

@@ -183,7 +183,11 @@ enum TsType {R_REQ, W_REQ, P_REQ, XP_REQ};
         (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_UNSAFE) || \
         (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_SNAPCOLLECTOR) || \
         (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_BUNDLE) || \
-        (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE)
+        (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_RBUNDLE) || \
+        (INDEX_STRUCT == IDX_SKIPLISTLOCK_RQ_VCAS) || \
+        (INDEX_STRUCT == IDX_CITRUS_RQ_BUNDLE) || \
+        (INDEX_STRUCT == IDX_CITRUS_RQ_RBUNDLE) || \
+        (INDEX_STRUCT == IDX_CITRUS_RQ_VCAS)
 #define INDEX           index_with_rq
 #elif (INDEX_STRUCT == IDX_BST)
 #define INDEX           index_bst
@@ -223,7 +227,7 @@ enum TsType {R_REQ, W_REQ, P_REQ, XP_REQ};
         (INDEX_STRUCT == IDX_INTLF_BASELINE) || \
         (INDEX_STRUCT == IDX_TICKET) || \
         (INDEX_STRUCT == IDX_TICKET_PAD) || \
-        (INDEX_STRUCT == IDX_TICKET_BASELINE) 
+        (INDEX_STRUCT == IDX_TICKET_BASELINE)
 #define INDEX           index_anomaly_bst
 #else // IDX_HASH
 #define INDEX		IndexHash

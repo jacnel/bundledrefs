@@ -133,19 +133,26 @@ bundle_skiplist<K, V, RecManager>::bundle_skiplist(const int numProcesses,
   const int dummyTid = 0;
   recmgr->initThread(dummyTid);
 
+  rqProvider =
+      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
+                     RecManager, true, false>(numProcesses, this, recmgr);
+
   p_tail = allocateNode(dummyTid);
   initNode(dummyTid, p_tail, KEY_MAX, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
 
   p_head = allocateNode(dummyTid);
   initNode(dummyTid, p_head, KEY_MIN, NO_VALUE, SKIPLIST_MAX_LEVEL - 1);
 
+  BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&p_head->rqbundle, nullptr};
+  nodeptr ptrs[] = {p_tail, nullptr};
+  rqProvider->prepare_bundles(bundles, ptrs);
+  timestamp_t ts = rqProvider->get_update_lin_time(dummyTid);
+
   for (i = 0; i < SKIPLIST_MAX_LEVEL; i++) {
     p_head->p_next[i] = p_tail;
   }
 
-  rqProvider =
-      new RQProvider<K, V, node_t<K, V>, bundle_skiplist<K, V, RecManager>,
-                     RecManager, true, false>(numProcesses, this, recmgr);
+  rqProvider->finalize_bundles(bundles, ts);
 }
 
 template <typename K, typename V, class RecManager>
@@ -197,17 +204,35 @@ bool bundle_skiplist<K, V, RecManager>::contains(const int tid, K key) {
       0,
   };
   nodeptr p_found = NULL;
+  nodeptr pred;
+  nodeptr curr;
   int lFound;
   bool res;
-  recmgr->leaveQuiescentState(tid, true);
-  lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
-  res = (lFound != -1) && p_succs[lFound]->fullyLinked &&
-        !p_succs[lFound]->marked;
-#ifdef RQ_SNAPCOLLECTOR
-  if (lFound != -1) rqProvider->search_report_target_key(tid, key, p_found);
-#endif
-  recmgr->enterQuiescentState(tid);
-  return res;
+
+  while (true) {
+    recmgr->leaveQuiescentState(tid, true);
+    lFound = find_impl(tid, key, p_preds, p_succs, &p_found);
+
+    if (lFound >= 0) {
+      pred = p_preds[lFound];
+      bool ok = pred->rqbundle.getPtr(tid, &curr);
+      assert(ok);
+      while (curr->key < key) {
+        ok = curr->rqbundle.getPtr(tid, &curr);
+        assert(ok);
+      }
+      if (curr->key == key) {
+        res = true;
+      } else {
+        res = false;
+      }
+    } else {
+      res = false;
+    }
+    rqProvider->end_traversal(tid);
+    recmgr->enterQuiescentState(tid);
+    return res;
+  }
 }
 
 template <typename K, typename V, class RecManager>
@@ -322,11 +347,15 @@ V bundle_skiplist<K, V, RecManager>::doInsert(const int tid, const K& key,
       rqProvider->prepare_bundles(bundles, ptrs);
 
       SOFTWARE_BARRIER;
+      timestamp_t lin_time = rqProvider->get_update_lin_time(tid);
+      SOFTWARE_BARRIER;
       for (level = 0; level <= topLevel; level++) {
         p_preds[level]->p_next[level] = p_new_node;
       }
-      timestamp_t lin_time = rqProvider->linearize_update_at_write(
-          tid, &p_new_node->fullyLinked, (long long)1);
+      // timestamp_t lin_time = rqProvider->linearize_update_at_write(
+      //     tid, &p_new_node->fullyLinked, (long long)1);
+      p_new_node->fullyLinked = 1;
+      SOFTWARE_BARRIER;
       rqProvider->finalize_bundles(bundles, lin_time);
 #ifdef __HANDLE_STATS
       GSTATS_ADD_IX(tid, skiplist_inserted_on_level, 1, topLevel);
@@ -405,9 +434,9 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
       }
 
       if (valid) {
-        BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&p_preds[0]->rqbundle,
-                                                     nullptr};
-        nodeptr ptrs[] = {p_victim->p_next[0], nullptr};
+        BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {
+            &p_preds[0]->rqbundle, &p_victim->rqbundle, nullptr};
+        nodeptr ptrs[] = {p_victim->p_next[0], p_head, nullptr};
         rqProvider->prepare_bundles(bundles, ptrs);
         timestamp_t lin_time = rqProvider->linearize_update_at_write(
             tid, &p_victim->marked, (long long)1);
@@ -463,30 +492,49 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
                                                   V* const resultValues) {
   //    cout<<"rangeQuery(lo="<<lo<<" hi="<<hi<<")"<<endl;
   timestamp_t ts;
+  bool ok;
   long i = 0;
   while (true) {
+    // `could_restart` tracks whether or not we have traversed from the head
+    // because we don't want range queries whose range immediately follows the
+    // head to be counted as restarted.
+    bool could_restart = false;
     int cnt = 0;
     recmgr->leaveQuiescentState(tid, true);
-    ts = rqProvider->start_traversal(tid);
-    SOFTWARE_BARRIER;
     nodeptr pred = p_head;
     nodeptr curr = nullptr;
-#ifdef BUNDLE_OPTIMIZE_RQS
+    // Phase 1. Pre-range traversal
     for (int level = SKIPLIST_MAX_LEVEL - 1; level >= 0; level--) {
       curr = pred->p_next[level];
       while (curr->key < lo) {
         pred = curr;
-        curr = pred->p_next[level];
+        curr = curr->p_next[level];
+        if (!could_restart) could_restart = true;
       }
     }
+
+    // Phase 2. Enter snapshot
+    ts = rqProvider->start_traversal(tid);
+    ok = pred->rqbundle.getPtrByTimestamp(tid, ts, &curr);
+    assert(ok);
+    if (unlikely(could_restart && curr == p_head)) {
+#ifdef __HANDLE_STATS
+      GSTATS_ADD(tid, bundle_restarts, 1);
 #endif
-    // Perform the traversal using the bundles.
-    curr = pred->rqbundle.getPtrByTimestamp(ts);
+    }
+
+    while (curr != nullptr && curr->key < lo) {
+      ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
+      assert(ok);
+    }
+
+    // Phase 3. Collect range
     while (curr != nullptr && curr->key <= hi) {
       if (curr->key >= lo) {
         cnt += getKeys(tid, curr, resultKeys + cnt, resultValues + cnt);
       }
-      curr = curr->rqbundle.getPtrByTimestamp(ts);
+      ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
+      assert(ok);
     }
     rqProvider->end_traversal(tid);
     recmgr->enterQuiescentState(tid);

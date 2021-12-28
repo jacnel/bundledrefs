@@ -41,7 +41,9 @@
 // [PART_ALLOC]
 #define PART_ALLOC false
 #define MEM_SIZE (1UL << 30)
+#ifndef NO_FREE
 #define NO_FREE true
+#endif
 
 /***********************************************/
 // Concurrency Control
@@ -263,6 +265,10 @@ extern TestCases g_test_case;
 #define IDX_BSLACK_RQ_RWLOCK 151
 #define IDX_BSLACK_RQ_HTM_RWLOCK 152
 #define IDX_BSLACK_RQ_UNSAFE 153
+#define IDX_SKIPLISTLOCK_RQ_RBUNDLE 154
+#define IDX_CITRUS_RQ_RBUNDLE 155
+#define IDX_SKIPLISTLOCK_RQ_VCAS 156
+#define IDX_CITRUS_RQ_VCAS 157
 // WORKLOAD
 #define YCSB 1
 #define TPCC 2

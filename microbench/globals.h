@@ -126,7 +126,37 @@ int TOTAL_THREADS;
     }) \
     handle_stat(LONG_LONG, key_checksum, 1, {}) \
     handle_stat(LONG_LONG, prefill_size, 1, {}) \
-    handle_stat(LONG_LONG, timer_latency, 1, {})
+    handle_stat(LONG_LONG, timer_latency, 1, {}) \
+    handle_stat(LONG_LONG, bundle_restarts, 1, { \
+            stat_output_item(PRINT_RAW, SUM, TOTAL) \
+             }) \
+    handle_stat(LONG_LONG, bundle_first, 1, { \
+            stat_output_item(PRINT_RAW, SUM, TOTAL) \
+             }) \
+    handle_stat(LONG_LONG, bundle_second, 1, { \
+            stat_output_item(PRINT_RAW, SUM, TOTAL) \
+             }) \
+    handle_stat(LONG_LONG, bundle_skip_first, 1, { \
+            stat_output_item(PRINT_RAW, SUM, TOTAL) \
+             }) \
+    handle_stat(LONG_LONG, bundle_retries, 10000, { \
+            stat_output_item(PRINT_HISTOGRAM_LOG, NONE, FULL_DATA) \
+          /*C stat_output_item(PRINT_RAW, NONE, FULL_DATA)*/ \
+          C stat_output_item(PRINT_RAW, SUM, TOTAL) \
+          C stat_output_item(PRINT_RAW, AVERAGE, TOTAL) \
+          C stat_output_item(PRINT_RAW, STDEV, TOTAL) \
+          C stat_output_item(PRINT_RAW, MIN, TOTAL) \
+          C stat_output_item(PRINT_RAW, MAX, TOTAL) \
+             }) \
+    handle_stat(LONG_LONG, bundle_traversals, 10000, { \
+            stat_output_item(PRINT_HISTOGRAM_LOG, NONE, FULL_DATA) \
+          /*C stat_output_item(PRINT_RAW, NONE, FULL_DATA)*/ \
+          C stat_output_item(PRINT_RAW, SUM, TOTAL) \
+          C stat_output_item(PRINT_RAW, AVERAGE, TOTAL) \
+          C stat_output_item(PRINT_RAW, STDEV, TOTAL) \
+          C stat_output_item(PRINT_RAW, MIN, TOTAL) \
+          C stat_output_item(PRINT_RAW, MAX, TOTAL) \
+             })
 
 #include "stats_global.h"
 GSTATS_DECLARE_STATS_OBJECT(MAX_TID_POW2);
