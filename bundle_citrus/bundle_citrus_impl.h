@@ -431,7 +431,7 @@ retry:
     // Prepare bundles. Note that if the successor's parent is the node being
     // deleted then the new node (which is a copy of the successor) needs to
     // point to it previous right-hand branch. Otherwise, the successor's
-    // parents left-hand branch will point to it. In the original
+    // parent's left-hand branch will point to it. In the original
     // implementation, this is updated after `synchronize()` but we perform this
     // check here to ensure that range queries follow the correct path.
     BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {
@@ -530,7 +530,10 @@ int bundle_citrustree<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     ts = rqProvider->start_traversal(tid);
     ok = pred->rqbundle[direction].getPtrByTimestamp(tid, ts, &curr);
     assert(ok);
-    if (curr == root->child[0]) {
+
+    // Note that `pred` can never be `root` so if we see that `curr` points to
+    // `root->child[0]` we must have restarted.
+    if (unlikely(curr == root->child[0])) {
       // A concurrent update may have inserted a new node immediately
       // preceding the range and we must start over.
 #ifdef __HANDLE_STATE

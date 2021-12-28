@@ -327,11 +327,16 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K &lo,
     recordmgr->leaveQuiescentState(tid, true);
 
     // Phase 1. Traverse to node immediately preceding range.
+    //
+    // A node `could_restart` if the range comes immediately after the head. We
+    // don't want to count this case as a restart.
+    bool could_restart = false;
     nodeptr curr = head;
     nodeptr pred = curr;
     while (curr != nullptr && curr->key < lo) {
       pred = curr;
       curr = curr->next;
+      if (!could_restart) could_restart = false;
     }
     assert(curr != nullptr);
 
@@ -339,7 +344,7 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K &lo,
     ts = rqProvider->start_traversal(tid);
     ok = enterSnapshot(tid, pred, ts, &curr);
     assert(ok);
-    if (curr == head) {
+    if (unlikely(could_restart && curr == head)) {
 #ifdef __HANDLE_STATS
       GSTATS_ADD(tid, bundle_restarts, 1);
 #endif
@@ -348,12 +353,6 @@ int bundle_lazylist<K, V, RecManager>::rangeQuery(const int tid, const K &lo,
       ok = curr->rqbundle.getPtrByTimestamp(tid, ts, &curr);
       assert(ok);
     }
-    // if (!enterSnapshot(tid, pred, ts, &curr)) {
-    //   // If entering the range fails, then restart.
-    //   rqProvider->end_traversal(tid);
-    //   recordmgr->enterQuiescentState(tid);
-    //   continue;
-    // }
 
     // Phase 3. Range collect.
     while (curr != nullptr && curr->key <= hi) {

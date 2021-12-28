@@ -434,8 +434,8 @@ V bundle_skiplist<K, V, RecManager>::erase(const int tid, const K& key) {
       }
 
       if (valid) {
-        BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {&p_preds[0]->rqbundle,
-                                                     &p_victim->rqbundle, nullptr};
+        BUNDLE_TYPE_DECL<node_t<K, V>>* bundles[] = {
+            &p_preds[0]->rqbundle, &p_victim->rqbundle, nullptr};
         nodeptr ptrs[] = {p_victim->p_next[0], p_head, nullptr};
         rqProvider->prepare_bundles(bundles, ptrs);
         timestamp_t lin_time = rqProvider->linearize_update_at_write(
@@ -495,6 +495,10 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
   bool ok;
   long i = 0;
   while (true) {
+    // `could_restart` tracks whether or not we have traversed from the head
+    // because we don't want range queries whose range immediately follows the
+    // head to be counted as restarted.
+    bool could_restart = false;
     int cnt = 0;
     recmgr->leaveQuiescentState(tid, true);
     nodeptr pred = p_head;
@@ -505,6 +509,7 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
       while (curr->key < lo) {
         pred = curr;
         curr = curr->p_next[level];
+        if (!could_restart) could_restart = true;
       }
     }
 
@@ -512,13 +517,10 @@ int bundle_skiplist<K, V, RecManager>::rangeQuery(const int tid, const K& lo,
     ts = rqProvider->start_traversal(tid);
     ok = pred->rqbundle.getPtrByTimestamp(tid, ts, &curr);
     assert(ok);
-    if (curr == p_head) {
+    if (unlikely(could_restart && curr == p_head)) {
 #ifdef __HANDLE_STATS
       GSTATS_ADD(tid, bundle_restarts, 1);
 #endif
-      // rqProvider->end_traversal(tid);
-      // recmgr->enterQuiescentState(tid);
-      // continue;
     }
 
     while (curr != nullptr && curr->key < lo) {

@@ -122,9 +122,9 @@ for algo in ${algos}; do
     if [[ ${trialcount} == ${ntrials} ]]; then
       if [[ ${samplecount} != ${ntrials} ]]; then
         echo "Warning: unexpected number of samples (${samplecount}). Computing averages anyway: ${rootname}"
-      fi
-
-      if [[ ${samplecount} != 0 ]]; then
+      elif [[ ${samplecount} == 0 ]]; then
+        echo "Error: No samples collected: ${rootname}"
+      else 
         printf "%s,%d,%.2f,%.2f,%d,%d,%d" ${list} ${maxkey} ${urate} ${rqrate} ${nwrkthrds} ${rqthrds} ${rqsize} >>${outfile}
         printf ",%d" $((${ulat} / ${samplecount})) >>${outfile}
         printf ",%d" $((${clat} / ${samplecount})) >>${outfile}
@@ -142,9 +142,8 @@ for algo in ${algos}; do
         printf ",%d" $((${avgretries} / ${samplecount})) >>${outfile}
         printf ",%d" $((${avgtraversals} / ${samplecount})) >>${outfile}
         printf "\n" >>${outfile}
-      else
-        echo "Error: No samples collected: ${rootname}"
       fi
+
       ulat=0
       clat=0
       rqlat=0

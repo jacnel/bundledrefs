@@ -222,7 +222,7 @@ def plot_workload(
     # Print speedup for paper.
     if FLAGS.print_speedup:
         ignore = ["ubundle"]
-        overalgo = "rlu"
+        overalgo = "unsafe"
         overalgos = [
             k for k in plotconfig.keys() if (k not in ignore and k != overalgo)
         ]

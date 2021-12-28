@@ -7,7 +7,7 @@ source ./supported.inc
 
 ## Overwrite datastructures and rqtechniques from 'supported.inc'
 ## Full experimental configurations.
-rqtechniques="unsafe vcas rlu bundle tsbundle lockfree"
+rqtechniques="unsafe vcas rlu bundle bundlerq lockfree"
 datastructures="lazylist skiplistlock citrus"
 ksizes="10000 1000000"
 
@@ -62,6 +62,13 @@ run_rq_sizes() {
   urate=50
   count=0
   prepare_exp "rq_sizes" >>experiment_list.txt
+
+  nthreads=24
+  if [[ $(($maxthreads / 2)) < ${nthreads} ]]; then
+    nthreads=$(($maxthreads / 2))
+    echo "WARNING (rq_sizes): maxthreads (${maxthreads} in '../config.mk') is less than 48. Use '--rqsizes_numrqthreads=${nthreads}' when running 'plot.py'"
+  fi
+
   for rqsize in $rqsizes; do
     for k in $ksizes; do
       for ds in $datastructures; do
@@ -70,7 +77,7 @@ run_rq_sizes() {
           if [ "$?" -ne 0 ]; then continue; fi
           check_ds_size $ds $k
           if [ "$?" -ne 0 ]; then continue; fi
-          echo $urate 0 $rqsize $k 24 24 $ds $alg >>experiment_list.txt
+          echo $urate 0 $rqsize $k $nthreads $nthreads $ds $alg >>experiment_list.txt
           count=$(($count + 1))
         done
       done
@@ -82,6 +89,6 @@ run_rq_sizes() {
 
 #< Indicates the plotting script should detect this line as an experiment to plot
 run_workloads #<
-run_rq_sizes #<
+run_rq_sizes  #<
 
 echo "Total experiment lines generated:" $(cat experiment_list.txt | wc -l)

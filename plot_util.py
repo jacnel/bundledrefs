@@ -59,18 +59,6 @@ plotconfig = {
         "symbol": 2,
         "macrobench": "RQ_BUNDLE",
     },
-    # "rbundle": {
-    #     "label": "Bundle (r)",
-    #     "color": COLORS[0],
-    #     "symbol": 5,
-    #     "macrobench": "RQ_RBUNDLE",
-    # },
-    # "rcbundle": {
-    #     "label": "Bundle (r+c)",
-    #     "color": COLORS[0],
-    #     "symbol": 6,
-    #     "macrobench": "",
-    # },
 }
 
 
@@ -284,9 +272,10 @@ def parse_runscript(filepath, config_list):
 
 
 def report_empty(run):
-    print(
-        "Warning: No data found; skipping ({}). This is not always an error (see `microbench/supported.inc`)"
-        .format(run))
+    pass
+    # print(
+    #     "Warning: No data found; skipping ({}). This is not always an error (see `microbench/supported.inc`)"
+    #     .format(run))
 
 
 class CSVFile:
@@ -314,7 +303,6 @@ class CSVFile:
         filepath = os.path.join(dirpath, ds + ".csv")
         assert os.path.exists(os.path.join("./microbench", "make_csv.sh"))
         if not os.path.exists(filepath):
-            print("No .csv file found for " + ds + ". Generating it now...")
             subprocess.call(
                 "./microbench/make_csv.sh " + dirpath + " " + str(n) + " " +
                 ds,

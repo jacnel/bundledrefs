@@ -79,8 +79,13 @@ while read u rq rqsize k nrq nwork ds alg; do
     fname="${currdir}/${alg}/step$cnt1.$machine.${ds}.${alg}.k$k.u$u.rq$rq.rqsize$rqsize.nrq$nrq.nwork$nwork.trial$trial.out"
     # echo "FNAME=$fname"
     cmd="./${machine}.${ds}.rq_${alg}.out -i $u -d $u -k $k -rq $rq -rqsize $rqsize ${prefill_and_time} -nrq $nrq -nwork $nwork ${pinning_policy}"
-    echo "env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so $cmd" >$fname
-    env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so $cmd >>$fname
+    if [[ "${allocator}" != "" ]]; then
+      echo "env LD_PRELOAD=${allocator} TREE_MALLOC=${allocator} $cmd" >$fname
+      env LD_PRELOAD=${allocator} TREE_MALLOC=${allocator} $cmd >>$fname
+    else
+      echo "$cmd" >$fname
+      env $cmd >>$fname
+    fi
     printf "${cols}" $cnt1 $machine $ds $alg $k $u $rq $rqsize $nrq $nwork $trial "$(cat $fname | grep 'total throughput' | cut -d':' -f2)" "$(cat $fname | grep 'total rq' | cut -d':' -f2)" "$(cat $fname | grep 'total updates' | cut -d':' -f2)" "$(cat $fname | grep 'total find' | cut -d':' -f2)" >>$fsummary
     tail -1 $fsummary
     echo

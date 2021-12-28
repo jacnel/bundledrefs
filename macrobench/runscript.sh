@@ -45,10 +45,6 @@ for counting in 1 0; do
   fi
 
   for exepath in $(ls ./bin/$machine/rundb*); do
-    if [ "${htm_error}" -ne "0" ]; then
-      if [[ $exepath == *"HTM"* ]]; then continue; fi
-    fi
-
     nthreads="1"
     for ((x = $threadincrement; x < ${maxthreads}; x += $threadincrement)); do nthreads="$nthreads $x"; done
     nthreads="$nthreads $maxthreads"
@@ -70,7 +66,12 @@ for counting in 1 0; do
           echo -n "step=$cnt1, trial=$trial, workload=$workload, datastructure=$datastructure, rqalg=$rqalg," >>$fsummary
 
           args="-t$n -n$n"
-          cmd="env LD_PRELOAD=../lib/libjemalloc.so TREE_MALLOC=../lib/libjemalloc.so $exepath $args"
+          if [[ "${allocator}" != "" ]]; then
+            cmd="env LD_PRELOAD=${allocator} TREE_MALLOC=${allocator} $exepath $args"
+          else
+            cmd="$exepath $args"
+          fi
+
           echo $fname >$fname
           echo $cmd >>$fname
           $cmd >>$fname
