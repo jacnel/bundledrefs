@@ -179,7 +179,9 @@ bool bundle_citrustree<K, V, RecManager>::contains(const int tid,
       if (curr != NULL) ckey = curr->key;
     }
 
+
     // Find key using bundles.
+    pred->rqbundle[child].getPtr(tid, &curr);
     if (curr != NULL)
       ckey = curr->key;  // Necessary because previous ckey may not reflect node
                          // pointed to by the bundle
