@@ -90,7 +90,7 @@ LDFLAGS += -lpapi
 
 machine=$(shell hostname)
 
-all: abtree bslack bst lazylist lflist citrus rlu skiplistlock bundle ubundle
+all: lazylist citrus rlu skiplistlock
 
 .PHONY: bundle rbundle
 bundle: citrus.rq_bundle skiplistlock.rq_bundle lazylist.rq_bundle

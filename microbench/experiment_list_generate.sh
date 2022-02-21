@@ -7,8 +7,8 @@ source ./supported.inc
 
 ## Overwrite datastructures and rqtechniques from 'supported.inc'
 ## Full experimental configurations.
-rqtechniques="unsafe vcas rlu bundle bundlerq lockfree"
-datastructures="lazylist skiplistlock citrus"
+rqtechniques="bundle"
+datastructures="skiplistlock"
 ksizes="10000 1000000"
 
 prepare_exp() {
