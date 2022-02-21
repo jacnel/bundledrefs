@@ -345,7 +345,7 @@ public:
     }
     if (curr == nullptr) {
       ss << "(tail)<" << curr->ts_ << "," << curr->ptr_ << ","
-         << reinterpret_cast<long>(curr->next_.load(std::memory_order_relaxed))
+         << reinterpret_cast<long>(curr->next_)
          << ">";
     } else {
       ss << "(unexpected end)";
