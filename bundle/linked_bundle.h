@@ -21,20 +21,19 @@
 #define unlikely(x) __builtin_expect((x), 0)
 
 #define DEBUG_PRINT_INIT() unsigned long i = 0
-#define DEBUG_PRINT(str)                         \
-  if ((i + 1) % 10000 == 0) {                    \
-    std::cout << str << std::endl << std::flush; \
-  }                                              \
+#define DEBUG_PRINT(str)                                                       \
+  if ((i + 1) % 10000 == 0) {                                                  \
+    std::cout << str << std::endl << std::flush;                               \
+  }                                                                            \
   ++i;
 
 enum op { NOP, INSERT, REMOVE };
 
-template <typename NodeType>
-class BundleEntry {
- public:
+template <typename NodeType> class BundleEntry {
+public:
   std::atomic<timestamp_t> ts_;
   NodeType *ptr_;
-  std::atomic<BundleEntry *> next_;
+  BundleEntry *next_; // Never changed (unless cleaning up)
   volatile timestamp_t deleted_ts_;
 
   BundleEntry() = delete;
@@ -59,9 +58,8 @@ class BundleEntry {
   }
 };
 
-template <typename NodeType>
-class LinkedBundle {
- private:
+template <typename NodeType> class LinkedBundle {
+private:
   std::atomic<BundleEntry<NodeType> *> head_;
   // BundleEntry<NodeType> *volatile tail_;
 
@@ -71,7 +69,7 @@ class LinkedBundle {
   volatile int oldest_edge = 0;
 #endif
 
- public:
+public:
   ~LinkedBundle() {
     BundleEntry<NodeType> *curr = head_.load();
     BundleEntry<NodeType> *next;
@@ -88,7 +86,7 @@ class LinkedBundle {
   // Inserts a new rq_bundle_node at the head of the bundle.
   inline void prepare(NodeType *const ptr) {
     BundleEntry<NodeType> *new_entry =
-        new BundleEntry<NodeType>(BUNDLE_PENDING_TIMESTAMP, ptr, nullptr);
+        new BundleEntry<NodeType>(BUNDLE_PENDING_TIMESTAMP, ptr, head_.load(std::memory_order_relaxed));
 
 #ifdef BUNDLE_LOCKFREE
     while (true) {
@@ -110,7 +108,6 @@ class LinkedBundle {
 #else
     // Since we have a lock on this node presently, we are able to use a less
     // stringent memory order
-    new_entry->next_.store(head_, std::memory_order_relaxed);
     head_.store(new_entry, std::memory_order_relaxed);
 #ifdef BUNDLE_DEBUG
     ++updates;
@@ -155,7 +152,7 @@ class LinkedBundle {
   inline bool getPtrByTimestamp(int tid, timestamp_t ts, NodeType **next) {
     // Check if the first entry satisfies the timestamp.
     BundleEntry<NodeType> *curr = head_;
-    assert(head_ != nullptr);  // An inserted node should always have an entry.
+    assert(head_ != nullptr); // An inserted node should always have an entry.
     if (curr != nullptr) {
       timestamp_t curr_ts = curr->ts_;
       if (curr_ts <= ts) {
@@ -231,13 +228,16 @@ class LinkedBundle {
     // reclaimable one. Ignore the first entry if it is pending or return if
     // there is nothing to reclaim.
     BundleEntry<NodeType> *pred = head_;
-    if (pred == nullptr) return;
+    if (pred == nullptr)
+      return;
     if (pred->ts_ == BUNDLE_PENDING_TIMESTAMP) {
       pred = pred->next_;
-      if (pred == nullptr) return;
+      if (pred == nullptr)
+        return;
     }
     BundleEntry<NodeType> *curr = pred->next_;
-    if (curr == nullptr) return;
+    if (curr == nullptr)
+      return;
 
     // Traverse the list of entries until we find the first entry whose
     // timestamp is less than or equal to the timestamp of the oldest range
@@ -246,7 +246,8 @@ class LinkedBundle {
       pred = curr;
       curr = curr->next_;
     }
-    if (curr == nullptr) return;  // No reclaimable entry found.
+    if (curr == nullptr)
+      return; // No reclaimable entry found.
 
     // At this point, pred points to the oldest node required by the given
     // timestamp. Therefore, we know that the chain starting at curr is
@@ -359,4 +360,4 @@ class LinkedBundle {
   }
 };
 
-#endif  // BUNDLE_LINKED_BUNDLE_H
+#endif // BUNDLE_LINKED_BUNDLE_H
